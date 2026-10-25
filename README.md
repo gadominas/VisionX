@@ -11,6 +11,20 @@
 </p>
 <p align="center"><sub>Left: a known plate is read and the "Open Gate" shortcut runs. Middle: counting vehicles and plates over a session. Right: setting up triggers.<br>Screenshots of the app's real interface, rendered with a drawn test scene in place of the camera.</sub></p>
 
+## Install
+
+1. Get **[Scriptable](https://apps.apple.com/app/scriptable/id1405459188)** (free) on your iPhone.
+2. In Scriptable, tap **+**, paste these two lines, name the script *VisionX Installer*, and tap **▶**:
+   ```js
+   const code = await new Request("https://raw.githubusercontent.com/gadominas/VisionX/main/install.js").loadString();
+   await eval("(async () => {" + code + "\n})()");
+   ```
+3. Tap **Open VisionX**. On first run, paste an OpenAI API key (kept in the iOS Keychain) or choose **Use Apple Intelligence only**. You can change the key later in the app.
+
+**Update:** run *VisionX Installer* again. Presets, triggers and settings are kept.
+
+**Rather not use the loader?** Paste [`install.js`](install.js) or [`VisionX.js`](VisionX.js) into a new script yourself.
+
 ## What it does
 
 - **Timed capture.** It takes a photo every N seconds from the live camera, with no tapping.
@@ -40,14 +54,6 @@
 **Shelf and stock watch.** "Any shelf section is empty" can trigger a restock reminder in Reminders.
 
 **Wildlife and pets.** Count species at a bird feeder over a morning, or get a notification when the dog is on the sofa.
-
-## Install
-
-1. Install [Scriptable](https://apps.apple.com/app/scriptable/id1405459188) on your iPhone.
-2. Create a new script, paste in [`VisionX.js`](VisionX.js) and run it.
-3. When asked, paste an OpenAI API key, which is stored in the iOS Keychain on the device. Or choose **Use Apple Intelligence only**.
-
-You can change or remove the key later from the app's settings with **Change API key**.
 
 ## How to use it
 
