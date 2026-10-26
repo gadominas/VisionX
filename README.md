@@ -3,13 +3,12 @@
 **Your iPhone as a smart camera, built with [Scriptable](https://scriptable.app).** VisionX takes a photo every few seconds, has an AI model (OpenAI or Apple Intelligence) look at it with your own instructions, and keeps a live summary of what it sees. When something you care about happens, it runs an Apple Shortcut, so it can open a gate, send a notification or switch on a light.
 
 <p align="center">
-  <img src="docs/screenshots/gate.png" width="260" alt="A car at the gate: the plate is read and the Open Gate shortcut runs">
-  &nbsp;
-  <img src="docs/screenshots/count.png" width="260" alt="Counting distinct vehicles and their plates over a session">
-  &nbsp;
-  <img src="docs/screenshots/triggers.png" width="260" alt="Editing a trigger that runs a shortcut">
+  <img src="docs/screenshots/gate.png" width="200" alt="A car at the gate: the plate is read and the Open Gate shortcut runs">
+  <img src="docs/screenshots/count.png" width="200" alt="Counting distinct vehicles and their plates over a session">
+  <img src="docs/screenshots/triggers.png" width="200" alt="Editing a trigger that runs a shortcut">
+  <img src="docs/screenshots/editor.png" width="200" alt="The expanded instructions editor with an AI-refined suggestion">
 </p>
-<p align="center"><sub>Left: a known plate is read and the "Open Gate" shortcut runs. Middle: counting vehicles and plates over a session. Right: setting up triggers.<br>Screenshots of the app's real interface, rendered with a drawn test scene in place of the camera.</sub></p>
+<p align="center"><sub>A known plate is read and the "Open Gate" shortcut runs · counting vehicles and plates over a session · setting up triggers · refining instructions with AI.<br>Screenshots of the app's real interface, rendered with a drawn test scene in place of the camera.</sub></p>
 
 ## Install
 
@@ -30,6 +29,7 @@
 - **Timed capture.** It takes a photo every N seconds from the live camera, with no tapping.
 - **Zoom while capturing.** Slide from 1× to 5× at any time, even mid-session; the next photo uses it. VisionX uses the camera's own zoom when iOS offers it and crops for anything beyond that.
 - **Your instructions.** It does whatever you describe, such as "Count the different people and summarize them" or "Read the license plate of any car at the gate". Save instructions you like as presets.
+- **Full-screen editor with AI refine.** Expand the instructions into a full-screen editor. **Refine with AI** rewrites them so the model knows exactly what to look for, count and ignore. Pick Clearer, More specific or Shorter, or say what should change, then use the suggestion or keep your own.
 - **Latest photo next to the summary.** The newest photo is large, with the summary beside it. The two photos before it are shown smaller, and that's all: photos are never saved.
 - **Two summary modes.** Each photo can build on one running summary for the whole session, or be judged fresh on its own (see [Modes](#modes)).
 - **Triggers.** A trigger has a plain-language condition, such as "A car with plate KXA 482 is at the gate", and a shortcut to run. When the model says the condition is met, the shortcut runs and receives the capture summary or your own message. Live rows show which triggers are waiting, checking or have fired, and each one can be switched on or off at any time.

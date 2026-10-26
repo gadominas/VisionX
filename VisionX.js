@@ -424,6 +424,25 @@ textarea:focus,input:focus,select:focus{outline:none;border-color:var(--ink)}
 .text.pending{color:var(--graphite);font-style:italic}
 
 /* End-of-session sheet */
+.labelRow{display:flex;align-items:flex-end;justify-content:space-between;gap:8px;margin-top:12px}
+.labelRow label{margin:0}
+.labelRow .chips{display:flex;gap:6px;flex:none}
+.chip.small{height:30px;padding:0 10px;font-size:13px}
+.editor{
+  position:fixed;inset:0;z-index:20;background:var(--paper);display:flex;flex-direction:column;overflow:auto;
+  padding:calc(env(safe-area-inset-top,0px) + 10px) 16px calc(env(safe-area-inset-bottom,0px) + 20px)
+}
+.edHead{display:flex;align-items:center;gap:10px}
+.edTitles{flex:1;min-width:0;text-align:center}
+.edTitles h2{margin:0;font-size:17px}
+.edTitles .hint{margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#edText{flex:0 0 auto;height:32vh;min-height:180px;margin-top:12px;font-size:16px;line-height:1.5;resize:none}
+.edMeta{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:6px;min-height:30px}
+.edRefine{margin-top:14px;padding-top:12px;border-top:1px solid var(--rule)}
+.edRefine h2{font-size:15px;margin:0}
+.edGo{width:100%;margin-top:10px}
+.edSuggest{margin-top:12px}
+.edProposal{white-space:pre-wrap;background:var(--surface);border:1px solid var(--done);border-radius:10px;padding:10px 12px;margin-top:6px;font-size:15px;line-height:1.45}
 .modal{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:flex-end;justify-content:center;z-index:10}
 .sheet{
   background:var(--surface);width:100%;max-width:720px;max-height:88vh;overflow:auto;
@@ -446,7 +465,13 @@ textarea:focus,input:focus,select:focus{outline:none;border-color:var(--ink)}
     <summary>What to look for</summary>
     <label for="preset">Preset</label>
     <select id="preset"></select>
-    <label for="instructions">Instructions for the model</label>
+    <div class="labelRow">
+      <label for="instructions">Instructions for the model</label>
+      <div class="chips">
+        <button type="button" class="chip small" id="iRefine">Refine with AI</button>
+        <button type="button" class="chip small" id="iExpand" aria-label="Expand the instructions editor">Expand</button>
+      </div>
+    </div>
     <textarea id="instructions" rows="3"></textarea>
     <div class="presetBar">
       <button type="button" class="chip" id="pUpdate">Update preset</button>
@@ -591,6 +616,40 @@ textarea:focus,input:focus,select:focus{outline:none;border-color:var(--ink)}
 
   <section id="frames"></section>
 
+  <div id="editor" class="editor hidden" role="dialog" aria-modal="true" aria-labelledby="edTitle">
+    <div class="edHead">
+      <button type="button" class="chip" id="edCancel">Cancel</button>
+      <div class="edTitles"><h2 id="edTitle">Instructions</h2><div id="edSub" class="hint"></div></div>
+      <button type="button" class="chip primary" id="edDone">Done</button>
+    </div>
+    <textarea id="edText" aria-label="Instructions for the model"></textarea>
+    <div class="edMeta">
+      <span id="edCount" class="hint"></span>
+      <button type="button" class="chip small hidden" id="edUndo">Undo refine</button>
+    </div>
+    <div id="edSuggest" class="edSuggest hidden" aria-live="polite">
+      <div id="edWhy" class="hint"></div>
+      <div id="edProposal" class="edProposal"></div>
+      <div class="presetBar">
+        <button type="button" class="chip primary" id="edUse">Use this</button>
+        <button type="button" class="chip" id="edKeep">Keep mine</button>
+      </div>
+    </div>
+    <section class="edRefine" aria-labelledby="edRefineTitle">
+      <h2 id="edRefineTitle">Refine with AI</h2>
+      <div class="hint">Rewrites your instructions so the model knows exactly what to look for, count and report. You decide whether to use the result.</div>
+      <div class="presetBar">
+        <button type="button" class="chip" data-ask="Make it clearer and less ambiguous.">Clearer</button>
+        <button type="button" class="chip" data-ask="Make it more specific: say exactly what to look for, what to count or track, and what to ignore.">More specific</button>
+        <button type="button" class="chip" data-ask="Make it shorter without losing anything important.">Shorter</button>
+      </div>
+      <label for="edAsk">What should change? (optional)</label>
+      <input id="edAsk" placeholder="e.g. also note clothing colours" autocapitalize="sentences">
+      <button type="button" class="btn edGo" id="edGo">Refine</button>
+      <div id="edStatus" class="hint" aria-live="polite"></div>
+    </section>
+  </div>
+
   <div id="modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="mTitle">
     <div class="sheet">
       <h1 id="mTitle">Session ended</h1>
@@ -636,7 +695,7 @@ const PAGE_JS = String.raw`
   const KEEP_FRAMES = 3;
   const LS_KEY = "vision-session-store-v2";
   const LS_OLD = "vision-session-settings-v1";
-  const PRESET_IDS = ["preset", "pUpdate", "pNew", "pDelete", "pName", "pSave", "pCancel", "modelCustom", "kChange", "kRefresh"];
+  const PRESET_IDS = ["preset", "pUpdate", "pNew", "pDelete", "pName", "pSave", "pCancel", "modelCustom", "kChange", "kRefresh", "iRefine", "iExpand"];
   const OTHER = "__other";
   // Shown when your model list can't be loaded. Pick "Other model ID…" for anything else.
   const COMMON_MODELS = ["gpt-5.5", "gpt-5.4", "gpt-5.4-mini", "gpt-5.4-nano", "gpt-5.2", "gpt-5.1", "gpt-5", "gpt-5-mini", "gpt-5-nano", "gpt-4.1", "gpt-4.1-mini", "gpt-4.1-nano", "gpt-4o", "gpt-4o-mini"];
@@ -671,6 +730,7 @@ const PAGE_JS = String.raw`
   let flashTimer = null;
   let editingTrigger = null;
   let shortcutChain = Promise.resolve();
+  let refining = false, beforeRefine = null;
   let zoomState = { camera: 1, digital: 1 }; // camera = lens zoom applied by iOS, digital = crop on top
   let zoomTimer = null, aimTimer = null;
   let rowEls = {};
@@ -692,6 +752,7 @@ const PAGE_JS = String.raw`
   persist();
   wireAccount();
   wireTriggers();
+  wireEditor();
   wireZoom();
   $("accumulate").addEventListener("change", () => { cfg.accumulate = $("accumulate").checked; persist(); updateModeUI(); });
   updateModeUI();
@@ -1428,6 +1489,146 @@ const PAGE_JS = String.raw`
       body.reasoning = { effort: "low" };
     }
     return body;
+  }
+
+  // ── instructions editor and AI refine ──
+  function openEditor(focusRefine) {
+    $("edText").value = $("instructions").value;
+    const a = activePreset();
+    $("edSub").textContent = a ? "Preset: " + a.name : "";
+    $("edSuggest").classList.add("hidden");
+    $("edStatus").textContent = "";
+    $("edUndo").classList.add("hidden");
+    beforeRefine = null;
+    updateEditorCount();
+    $("editor").classList.remove("hidden");
+    document.body.style.overflow = "hidden";
+    (focusRefine ? $("edAsk") : $("edText")).focus();
+  }
+  function closeEditor(apply) {
+    if (apply) {
+      $("instructions").value = $("edText").value.trim();
+      $("instructions").dispatchEvent(new Event("input"));
+    }
+    $("editor").classList.add("hidden");
+    document.body.style.overflow = "";
+  }
+  function updateEditorCount() {
+    const t = $("edText").value.trim();
+    const words = t ? t.split(/\s+/).length : 0;
+    $("edCount").textContent = words + (words === 1 ? " word" : " words") + ", " + t.length + " characters";
+  }
+
+  function refinePrompt(current, ask) {
+    return [
+      "You improve instructions for a vision model. The model looks at photos from a live phone camera, one photo every few seconds, and answers by following these instructions.",
+      isMoment()
+        ? "Each photo is judged on its own, so the instructions should say what to report about a single moment."
+        : "Each photo is merged into one running summary for the whole session, so the instructions should say what to track and count over time.",
+      "",
+      "Rewrite the instructions so they are clear, specific and unambiguous: what to look for, what to count or track, what to ignore, and how to phrase the answer (concise).",
+      "Keep the user's intent, any names, numbers or plates they gave, and the language they wrote in. Don't add output-format or JSON rules; the app adds those. Don't invent requirements the user didn't imply.",
+      ask ? "\nREQUESTED CHANGE:\n" + ask : "",
+      "",
+      "CURRENT INSTRUCTIONS:",
+      current,
+      "",
+      'Respond with JSON only: {"instructions": "the improved instructions", "changes": "one short sentence on what you changed"}',
+    ].join("\n");
+  }
+
+  function parseRefine(text) {
+    let src = String(text || "").trim();
+    const a = src.indexOf("{"), b = src.lastIndexOf("}");
+    if (a !== -1 && b > a) {
+      try {
+        const j = JSON.parse(src.slice(a, b + 1));
+        if (typeof j.instructions === "string" && j.instructions.trim()) {
+          return { text: j.instructions.trim(), why: String(j.changes || "") };
+        }
+      } catch (_) {}
+    }
+    return { text: src, why: "" };
+  }
+
+  async function refineInstructions(ask) {
+    const current = $("edText").value.trim();
+    if (!current) { $("edStatus").textContent = "Write some instructions first."; $("edText").focus(); return; }
+    if (refining) return;
+    refining = true;
+    const buttons = document.querySelectorAll("#editor .edRefine button, #edUse, #edKeep");
+    buttons.forEach((b) => { b.disabled = true; });
+    $("edSuggest").classList.add("hidden");
+    $("edStatus").textContent = "Refining…";
+    try {
+      const prompt = refinePrompt(current, ask);
+      let reply, via;
+      if (account.hasKey) {
+        const r = await openaiRequest({ running: true }, () => withModelOptions({
+          model: cfg.model,
+          input: [{ role: "user", content: [{ type: "input_text", text: prompt }] }],
+          max_output_tokens: 2000,
+          store: false,
+        }));
+        reply = r.text;
+        via = cfg.model + (r.usage.total_tokens ? ", " + fmtNum(r.usage.total_tokens) + " tokens" : "");
+      } else if (isApple()) {
+        reply = await withShortcutLock(() => nativeCall("appleText", { shortcut: cfg.checkShortcut, text: prompt }, 180000));
+        via = "Apple Intelligence";
+      } else {
+        throw new Error("add an OpenAI API key, or switch to Apple Intelligence");
+      }
+      const out = parseRefine(reply);
+      if (!out.text) throw new Error("the model returned nothing");
+      if (out.text === current) {
+        $("edStatus").textContent = "No changes suggested. Your instructions already look good.";
+        return;
+      }
+      $("edStatus").textContent = "";
+      $("edWhy").textContent = (out.why ? out.why + " " : "") + "(" + via + ")";
+      $("edProposal").textContent = out.text;
+      $("edSuggest").classList.remove("hidden");
+      $("edSuggest").scrollIntoView({ block: "nearest" });
+    } catch (e) {
+      $("edStatus").textContent = "Couldn't refine: " + e.message +
+        (!account.hasKey && isApple() ? ". Refining with Apple Intelligence uses the checker shortcut (see Triggers)." : ".");
+    } finally {
+      refining = false;
+      buttons.forEach((b) => { b.disabled = false; });
+    }
+  }
+
+  function wireEditor() {
+    $("iExpand").addEventListener("click", () => openEditor(false));
+    $("iRefine").addEventListener("click", () => openEditor(true));
+    $("edCancel").addEventListener("click", () => closeEditor(false));
+    $("edDone").addEventListener("click", () => closeEditor(true));
+    $("edText").addEventListener("input", updateEditorCount);
+    $("edGo").addEventListener("click", () => refineInstructions($("edAsk").value.trim()));
+    $("edAsk").addEventListener("keydown", (e) => { if (e.key === "Enter") $("edGo").click(); });
+    document.querySelectorAll("#editor [data-ask]").forEach((b) => {
+      b.addEventListener("click", () => {
+        const extra = $("edAsk").value.trim();
+        refineInstructions(b.dataset.ask + (extra ? " Also: " + extra : ""));
+      });
+    });
+    $("edUse").addEventListener("click", () => {
+      beforeRefine = $("edText").value;
+      $("edText").value = $("edProposal").textContent;
+      $("edSuggest").classList.add("hidden");
+      $("edUndo").classList.remove("hidden");
+      $("edStatus").textContent = "Applied. Tap Done to keep it.";
+      updateEditorCount();
+    });
+    $("edKeep").addEventListener("click", () => { $("edSuggest").classList.add("hidden"); $("edStatus").textContent = ""; });
+    $("edUndo").addEventListener("click", () => {
+      if (beforeRefine == null) return;
+      $("edText").value = beforeRefine;
+      beforeRefine = null;
+      $("edUndo").classList.add("hidden");
+      $("edStatus").textContent = "Restored your previous text.";
+      updateEditorCount();
+    });
   }
 
   // ── triggers ──
