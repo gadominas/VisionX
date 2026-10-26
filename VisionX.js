@@ -1441,7 +1441,7 @@ const PAGE_JS = String.raw`
       "Respond in exactly this format and nothing else:",
       "FRAME: 1-2 sentences on what THIS frame shows that matters for the task",
       "SUMMARY: concise cumulative answer to the task for the whole session so far",
-      "STATE: the full updated cumulative state as compact JSON on a single line",
+      "STATE: the full updated cumulative state as valid JSON with double-quoted keys",
     ] : [
       "Respond with JSON only, using exactly these keys:",
       '{"frame": "1-2 sentences on what THIS frame shows that matters for the task",',
@@ -2104,6 +2104,13 @@ const PAGE_JS = String.raw`
   function parseResult(text) {
     const raw = String(text || "").trim();
     if (!raw) return { frame: "(empty response)", state: null, summary: "", triggers: null };
+    // Labels that come before any "{" mean the labelled format; read that first.
+    const labelAt = raw.search(/^[\s*#>-]*(FRAME|SUMMARY)\s*\**\s*:/im);
+    const braceAt = raw.indexOf("{");
+    if (labelAt !== -1 && (braceAt === -1 || labelAt < braceAt)) {
+      const first = parseLabelled(raw);
+      if (first) return first;
+    }
     const j = parseLooseJSON(raw);
     if (j && (j.summary != null || j.frame != null)) return fromReplyObject(j);
     const labelled = parseLabelled(raw);
@@ -2119,13 +2126,21 @@ const PAGE_JS = String.raw`
 
   function parseLooseJSON(raw) {
     const src = String(raw || "").replace(/\x60{3}(?:json)?/gi, "");
-    const a = src.indexOf("{"), b = src.lastIndexOf("}");
-    if (a === -1 || b <= a) return null;
+    const a = src.search(/[{\[]/);
+    if (a === -1) return null;
+    const close = balancedEnd(src, a);
+    const b = close !== -1 ? close - 1 : Math.max(src.lastIndexOf("}"), src.lastIndexOf("]"));
+    if (b <= a) return null;
     const body = src.slice(a, b + 1);
     const oneLine = body.replace(/\r?\n/g, " ");
     const noTrailing = oneLine.replace(/,\s*([}\]])/g, "$1");
     const straight = noTrailing.replace(/[\u201C\u201D\u201E\u201F]/g, '"').replace(/[\u2018\u2019]/g, "'");
-    for (const t of [body, oneLine, noTrailing, straight]) {
+    const quotedKeys = straight.replace(/([{,]\s*)([A-Za-z_][\w -]*?)\s*:/g, '$1"$2":');
+    const singleQuotes = quotedKeys.replace(/'([^'"\\]*)'/g, '"$1"');
+    // Bare words as values (status: asleep) become strings; numbers and true/false/null stay.
+    const bareValues = singleQuotes.replace(/:\s*([^"{\[\s,][^,}\]]*?)\s*(?=[,}\]])/g, (m, v) =>
+      /^(-?\d+(\.\d+)?|true|false|null)$/.test(v) ? ": " + v : ": " + JSON.stringify(v));
+    for (const t of [body, oneLine, noTrailing, straight, quotedKeys, singleQuotes, bareValues]) {
       try {
         const j = JSON.parse(t);
         if (j && typeof j === "object") return j;
@@ -2134,10 +2149,38 @@ const PAGE_JS = String.raw`
     return null;
   }
 
+  // Index just past the bracket that closes the one at str[from], or -1.
+  function balancedEnd(str, from) {
+    let depth = 0, inStr = false, esc = false;
+    for (let i = from; i < str.length; i++) {
+      const c = str[i];
+      if (inStr) {
+        if (esc) esc = false;
+        else if (c === "\\") esc = true;
+        else if (c === '"') inStr = false;
+        continue;
+      }
+      if (c === '"') inStr = true;
+      else if (c === "{" || c === "[") depth++;
+      else if (c === "}" || c === "]") { depth--; if (depth === 0) return i + 1; }
+    }
+    return -1;
+  }
+
+  // State text that couldn't be read is kept as notes only if it says something;
+  // otherwise null, so the previous details stay in place.
+  function stateFrom(text) {
+    const t = String(text || "").trim();
+    if (!t) return null;
+    const j = parseLooseJSON(t);
+    if (j) return j;
+    return t.replace(/[{}\[\]",:\s]/g, "").length > 15 ? { notes: t } : null;
+  }
+
   function fromReplyObject(j) {
     let state = null;
     if (j.state && typeof j.state === "object") state = j.state;
-    else if (typeof j.state === "string" && j.state.trim()) state = parseLooseJSON(j.state) || { notes: j.state };
+    else if (typeof j.state === "string") state = stateFrom(j.state);
     return {
       frame: typeof j.frame === "string" ? j.frame : JSON.stringify(j.frame || ""),
       state: state,
@@ -2153,14 +2196,26 @@ const PAGE_JS = String.raw`
     while ((m = re.exec(raw))) marks.push({ key: m[1].toUpperCase(), start: m.index, body: re.lastIndex });
     if (!marks.length) return null;
     const parts = {};
+    let skipUntil = -1;
     marks.forEach((mk, i) => {
-      parts[mk.key] = raw.slice(mk.body, i + 1 < marks.length ? marks[i + 1].start : raw.length).trim();
+      if (mk.start < skipUntil) return; // a "label" inside a STATE/TRIGGERS block
+      let end = raw.length;
+      for (let k = i + 1; k < marks.length; k++) {
+        if (marks[k].start >= mk.body) { end = marks[k].start; break; }
+      }
+      if (mk.key === "STATE" || mk.key === "TRIGGERS") {
+        const offset = raw.slice(mk.body).search(/\S/);
+        const at = offset === -1 ? -1 : mk.body + offset;
+        if (at !== -1 && (raw[at] === "{" || raw[at] === "[")) {
+          const close = balancedEnd(raw, at);
+          if (close !== -1) { end = close; skipUntil = close; }
+        }
+      }
+      if (!(mk.key in parts)) parts[mk.key] = raw.slice(mk.body, end).trim();
     });
     if (!parts.SUMMARY && !parts.FRAME) return null;
-    let state = null;
-    if (parts.STATE) state = parseLooseJSON(parts.STATE) || { notes: parts.STATE };
     const triggers = parts.TRIGGERS ? normalizeVerdicts(parseLooseJSON(parts.TRIGGERS)) : null;
-    return { frame: parts.FRAME || "", state: state, summary: parts.SUMMARY || parts.FRAME || "", triggers: triggers };
+    return { frame: parts.FRAME || "", state: stateFrom(parts.STATE), summary: parts.SUMMARY || parts.FRAME || "", triggers: triggers };
   }
 
   // ── timing ──
