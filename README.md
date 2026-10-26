@@ -86,9 +86,12 @@ Each trigger has a name, a condition, the shortcut to run, and **when to check**
 
 And **when to run** the shortcut:
 
-- **Each time it becomes true** (default): runs once, then waits until the condition is false again.
+- **Each time it becomes true** (default): runs once, then waits until the condition is false again. With a summary that builds up, a condition like "a thumbs-up was seen" stays true, so this runs only once per session.
+- **Each new occurrence**: runs whenever the condition happens again, for example every new thumbs-up. The check is told what had already happened the last time the shortcut ran.
 - **Only the first time**: runs at most once per session.
 - **Every check while true**: runs on every check where the condition is met.
+
+If a trigger says "met" but its shortcut didn't run, the trigger row and the debug log say why.
 
 Each trigger also chooses what its shortcut receives as **Shortcut Input**:
 

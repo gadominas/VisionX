@@ -578,9 +578,11 @@ details.dbgCheck>summary{font-size:13px;cursor:pointer}
         <div><label for="tMode">Run the shortcut</label><select id="tMode">
           <option value="rise">Each time it becomes true</option>
           <option value="once">Only the first time</option>
+          <option value="new">Each new occurrence</option>
           <option value="every">Every check while true</option>
         </select></div>
       </div>
+      <div class="hint" id="tModeHint"></div>
       <label for="tShortcut">Shortcut to run</label>
       <input id="tShortcut" placeholder="Exact shortcut name" autocapitalize="off" autocorrect="off" spellcheck="false">
       <label for="tSend">Send to the shortcut</label>
@@ -1709,12 +1711,14 @@ const PAGE_JS = String.raw`
     if (e.error) section("Error", codeBlock(escHTML(e.error), "bad"));
     e.checks.forEach((c) => {
       const d = el("details", "dbgCheck");
-      d.appendChild(el("summary", null, "Trigger check: " + c.trigger + " at " + c.time + (c.error ? " (error)" : c.verdict ? (c.verdict.met ? " (met)" : " (not met)") : "")));
+      const ran = /ran at/.test(c.decision || "");
+      d.appendChild(el("summary", null, "Trigger check: " + c.trigger + " at " + c.time + (c.error ? " (error)" : c.verdict ? (c.verdict.met ? (ran ? " (met, shortcut ran)" : " (met, shortcut not run)") : " (not met)") : "")));
       const inner = el("div");
       const add = (title, node) => { inner.appendChild(el("h3", null, title)); inner.appendChild(node); };
       add("Sent", codeBlock(highlightMixed(c.prompt)));
       if (c.raw) add("Reply as received", codeBlock(highlightMixed(c.raw)));
       if (c.verdict) add("Reply as understood", codeBlock(highlightJSON(JSON.stringify(c.verdict, null, 2))));
+      if (c.decision) add("What VisionX did", codeBlock(escHTML(c.decision), /didn't run|failed/.test(c.decision) ? "bad" : ""));
       if (c.error) add("Error", codeBlock(escHTML(c.error), "bad"));
       d.appendChild(inner);
       body.appendChild(d);
@@ -1893,8 +1897,17 @@ const PAGE_JS = String.raw`
     return run;
   }
 
-  function triggerPrompt(sess, t) {
+  function triggerPrompt(sess, st) {
+    const t = st.t;
     const started = new Date(sess.stats.start);
+    const since = (t.mode === "new" && st.lastRun) ? [
+      "",
+      "THIS TRIGGER ALREADY RAN at " + st.lastRun.time + " (after photo #" + st.lastRun.idx + "), because: " + st.lastRun.reason,
+      "The summary at that time was:",
+      st.lastRun.summary,
+      "",
+      "Answer met = true only if the condition has happened AGAIN since then: the summary must show a new occurrence beyond what had already happened at that time. If nothing new happened, met = false.",
+    ] : [];
     return [
       "You decide whether a condition is met, based on the running summary of a live camera session.",
       "",
@@ -1910,10 +1923,11 @@ const PAGE_JS = String.raw`
       "",
       "TRACKED DETAILS (JSON):",
       JSON.stringify(sess.state),
+    ].concat(since, [
       "",
       "Judge only from this information. If it isn't enough to tell, the condition is not met.",
       'Respond with JSON only: {"met": true or false, "reason": "one short sentence"}',
-    ].join("\n");
+    ]).join("\n");
   }
 
   function parseVerdict(text) {
@@ -1992,7 +2006,7 @@ const PAGE_JS = String.raw`
     st.busy = true;
     st.status = "checking";
     renderTriggerStatus();
-    const prompt = triggerPrompt(sess, st.t);
+    const prompt = triggerPrompt(sess, st);
     const log = { trigger: st.t.name, time: new Date().toLocaleTimeString(), prompt: prompt, raw: "", verdict: null, error: "" };
     const host = sess.debug[0];
     if (host) { host.checks.push(log); if (host.checks.length > 10) host.checks.shift(); }
@@ -2016,10 +2030,11 @@ const PAGE_JS = String.raw`
         verdict = parseVerdict(r.text);
       }
       log.verdict = verdict;
-      if (!sess.running) return;
-      await applyVerdict(sess, st, verdict);
+      if (!sess.running) { log.decision = "The session ended before the shortcut could run."; return; }
+      log.decision = await applyVerdict(sess, st, verdict);
     } catch (e) {
       log.error = e.message;
+      if (e.decision) log.decision = e.decision;
       if (e.cancelled) return;
       st.status = "error";
       st.error = e.message;
@@ -2031,29 +2046,49 @@ const PAGE_JS = String.raw`
   }
 
   // Decide whether this verdict should run the shortcut, and run it.
+  // Decides whether this verdict runs the shortcut, runs it, and returns why or why not.
   async function applyVerdict(sess, st, verdict) {
     sess.stats.checks++;
     st.checks++;
     st.reason = verdict.reason;
     st.error = "";
-    const mode = st.t.mode || "rise";
-    const fire = verdict.met && (mode === "every" || (mode === "rise" && st.armed) || (mode === "once" && !st.fired));
-    if (!verdict.met) st.armed = true;
+    let mode = st.t.mode || "rise";
+    if (mode === "new" && isMoment()) mode = "rise"; // each photo stands alone, so a new occurrence = becoming true
+    let fire = false, decision;
+    if (!verdict.met) { st.armed = true; decision = "Not met, so the shortcut didn't run."; }
+    else if (mode === "every" || mode === "new") { fire = true; }
+    else if (mode === "once") {
+      fire = !st.fired;
+      if (!fire) decision = "Met, but the shortcut didn't run: it is set to run only the first time, and it already ran.";
+    } else {
+      fire = st.armed;
+      if (!fire) decision = "Met, but the shortcut didn't run: it is set to run each time the condition becomes true, it already ran, and the condition hasn't been false since." +
+        (isMoment() ? "" : " With a summary that builds up, choose \u201CEach new occurrence\u201D for repeated events.");
+    }
+    st.decision = decision || "";
     if (!fire) {
       st.status = verdict.met ? "met" : "notmet";
-      return;
+      return decision;
     }
     st.status = "firing";
     renderTriggerStatus();
     const text = shortcutInput(sess, st);
-    await withShortcutLock(() => nativeCall("runShortcut", { shortcut: st.t.shortcut, text: text }, 600000));
+    try {
+      await withShortcutLock(() => nativeCall("runShortcut", { shortcut: st.t.shortcut, text: text }, 600000));
+    } catch (e) {
+      e.decision = "Met, and the shortcut was started, but it failed: " + e.message;
+      throw e;
+    }
     st.fired++;
     sess.stats.fired++;
     st.armed = false;
     st.firedAt = new Date().toLocaleTimeString();
+    st.lastRun = { time: st.firedAt, idx: (sess.summaryAt && sess.summaryAt.idx) || sess.seq, reason: verdict.reason, summary: sess.summary };
     st.flashUntil = Date.now() + 2500;
     st.status = "fired";
     if (mode === "once") st.done = true;
+    st.decision = "Met, so \u201C" + st.t.shortcut + "\u201D ran at " + st.firedAt + ".";
+    return st.decision;
   }
 
   // What the trigger's shortcut receives as Shortcut Input.
@@ -2081,9 +2116,13 @@ const PAGE_JS = String.raw`
         return;
       }
       st.busy = true;
+      const log = { trigger: st.t.name, time: new Date().toLocaleTimeString(), prompt: "(judged inside this photo's request)", raw: "", verdict: v, error: "", decision: "" };
+      const host = sess.debug[0];
+      if (host) { host.checks.push(log); if (host.checks.length > 10) host.checks.shift(); }
       jobs.push(applyVerdict(sess, st, v)
-        .catch((e) => { if (!e.cancelled) { st.status = "error"; st.error = e.message; } })
-        .finally(() => { st.busy = false; if (sess === S) renderTriggerStatus(); }));
+        .then((d) => { log.decision = d || ""; })
+        .catch((e) => { log.error = e.message; log.decision = e.decision || ""; if (!e.cancelled) { st.status = "error"; st.error = e.message; } })
+        .finally(() => { st.busy = false; if (sess === S) { renderTriggerStatus(); renderDebug(); } }));
     });
     if (sess === S) renderTriggerStatus();
     return Promise.all(jobs);
@@ -2159,7 +2198,7 @@ const PAGE_JS = String.raw`
         case "checking": line = "Checking the condition…"; break;
         case "firing": line = "Condition met. Running \u201C" + st.t.shortcut + "\u201D…"; break;
         case "notmet": line = "Not met: " + st.reason; break;
-        case "met": line = "Still met, already ran: " + st.reason; break;
+        case "met": line = "Still met (" + st.reason.replace(/[.!]+$/, "") + "), not run again: " + (st.t.mode === "once" ? "it runs only the first time." : "it already ran and waits for the condition to turn false." + (isMoment() ? "" : " Choose \u201CEach new occurrence\u201D for repeated events.")); break;
         case "fired": line = "Ran \u201C" + st.t.shortcut + "\u201D at " + st.firedAt + ": " + st.reason; break;
         case "error": line = "Problem: " + st.error; break;
         default: line = "";
@@ -2185,7 +2224,7 @@ const PAGE_JS = String.raw`
       const row = el("div", "tItem" + (t.enabled === false ? " off" : ""));
       const sw = makeSwitch(t.enabled !== false, "Trigger " + t.name + " on", (on) => setTriggerEnabled(t.id, on));
       const txt = el("div", "tText");
-      const modeText = { rise: "each time it becomes true", once: "only the first time", every: "every check while true" }[t.mode || "rise"];
+      const modeText = { rise: "each time it becomes true", once: "only the first time", every: "every check while true", new: "for each new occurrence" }[t.mode || "rise"];
       txt.append(el("b", null, t.name), el("span", "tsub", t.condition), el("span", "tsub", triggerWhenText(t) + "; runs \u201C" + t.shortcut + "\u201D " + modeText + ", sending " + (t.send === "custom" ? "a custom message" : "the summary") + "."));
       const edit = el("button", "chip", "Edit");
       edit.type = "button";
@@ -2205,6 +2244,13 @@ const PAGE_JS = String.raw`
     $("tWhenBox").classList.toggle("hidden", moment);
     $("tEveryBox").classList.toggle("hidden", perPhoto);
     $("tGrid").style.gridTemplateColumns = perPhoto ? "1fr" : "";
+    const modeHint = {
+      rise: "Runs once, then waits until the condition is false again. With a summary that builds up, a condition like \u201Ca thumbs-up was seen\u201D stays true, so it runs only once.",
+      new: "Runs again whenever the condition happens anew, for example a second thumbs-up. The model is told what had already happened the last time the shortcut ran.",
+      once: "Runs at most once per session.",
+      every: "Runs on every check where the condition is met.",
+    }[$("tMode").value] || "";
+    $("tModeHint").textContent = modeHint;
     $("tWhenHint").textContent = $("tWhen").value === "photo"
       ? "Checked right after every photo, against the updated summary. The next photo waits until this check and its shortcut have finished."
       : "Checked on its own timer, independent of photos.";
@@ -2239,6 +2285,7 @@ const PAGE_JS = String.raw`
     $("tAdd").addEventListener("click", () => openTriggerForm(null));
     $("tCancel").addEventListener("click", () => $("trigForm").classList.add("hidden"));
     $("tWhen").addEventListener("change", updateTrigFormUI);
+    $("tMode").addEventListener("change", updateTrigFormUI);
     $("tSend").addEventListener("change", () => {
       const custom = $("tSend").value === "custom";
       $("tMsgBox").classList.toggle("hidden", !custom);
