@@ -33,6 +33,7 @@
 - **Latest photo next to the summary.** The newest photo is large, with the summary beside it. The two photos before it are shown smaller, and that's all: photos are never saved.
 - **Two summary modes.** Each photo can build on one running summary for the whole session, or be judged fresh on its own (see [Modes](#modes)).
 - **Triggers.** A trigger has a plain-language condition, such as "A car with plate KXA 482 is at the gate", and a shortcut to run. When the model says the condition is met, the shortcut runs and receives the capture summary or your own message. Live rows show which triggers are waiting, checking or have fired, and each one can be switched on or off at any time.
+- **Debug log.** The last 10 photos are kept in memory with exactly what was sent (instructions, context, request settings) and what came back, both as received and as understood, plus any trigger checks. JSON is syntax-highlighted, and **Copy as JSON** copies the log without the photos.
 - **Session stats.** At the end you see the duration, photos taken, requests sent, tokens used, and how many times each trigger fired.
 - **OpenAI or Apple Intelligence.** Use any image-capable OpenAI model from your account, or Apple Intelligence through Shortcuts with no API key.
 
@@ -116,7 +117,7 @@ Both shortcut names can be changed in the app.
 
 ## Privacy
 
-- Photos are kept in memory only, and only the last three. They are never written to disk or Photos.
+- Photos are kept in memory only: the last three on screen and the last ten in the debug log. They are never written to disk or Photos, and they're cleared when a new session starts.
 - Each photo is sent to the model you choose, either OpenAI or Apple's Private Cloud Compute. OpenAI requests are sent with `store: false`.
 - The OpenAI API key stays in the iOS Keychain.
 - Presets, triggers and settings are saved in Scriptable's local Documents folder as `vision-session.json`.

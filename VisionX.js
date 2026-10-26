@@ -139,6 +139,7 @@ async function handleBridgeCall(wv, ctx, id) {
     else if (msg.type === "appleText") result = (await runShortcutText(msg.payload.shortcut, msg.payload.text)).text;
     else if (msg.type === "runShortcut") result = await runShortcutText(msg.payload.shortcut, msg.payload.text);
     else if (msg.type === "save") { writeStore(msg.payload); result = true; }
+    else if (msg.type === "copy") { Pasteboard.copy(String(msg.payload.text || "")); result = true; }
     else throw new Error("unknown request type " + msg.type);
     reply = { ok: true, result };
   } catch (e) {
@@ -389,7 +390,7 @@ textarea:focus,input:focus,select:focus{outline:none;border-color:var(--ink)}
 
 .muted{color:var(--graphite)}
 .tracked{margin:10px 0 0;font-size:13px;color:var(--graphite)}
-.tracked pre{white-space:pre-wrap;word-break:break-word;background:var(--field);padding:10px;border-radius:8px;font-size:12px;margin:6px 0 0;max-height:240px;overflow:auto}
+.tracked pre.old{white-space:pre-wrap;word-break:break-word;background:var(--field);padding:10px;border-radius:8px;font-size:12px;margin:6px 0 0;max-height:240px;overflow:auto}
 
 /* Latest frame: the viewfinder */
 .finder{position:relative;border-radius:6px;overflow:hidden;background:#000}
@@ -447,6 +448,25 @@ textarea:focus,input:focus,select:focus{outline:none;border-color:var(--ink)}
 .edGo{width:100%;margin-top:10px}
 .edSuggest{margin-top:12px}
 .edProposal{white-space:pre-wrap;background:var(--surface);border:1px solid var(--done);border-radius:10px;padding:10px 12px;margin-top:6px;font-size:15px;line-height:1.45}
+:root{--jk:#1d4ed8;--js:#0f766e;--jn:#b45309;--jb:#be185d;--jp:#6b7280}
+@media (prefers-color-scheme:dark){:root{--jk:#7cb7ff;--js:#5eead4;--jn:#fbbf24;--jb:#f472b6;--jp:#8c96a3}}
+.jk{color:var(--jk)}.js{color:var(--js)}.jn{color:var(--jn)}.jb{color:var(--jb);font-weight:600}.jp{color:var(--jp)}.jl{font-weight:700;color:var(--ink)}
+.code{font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;white-space:pre-wrap;word-break:break-word;background:var(--field);color:var(--ink);padding:10px;border-radius:8px;max-height:280px;overflow:auto;margin:4px 0 0}
+.code.bad{color:var(--rec)}
+#debugBox{margin-top:18px}
+.dbgList{display:grid;gap:8px;margin-top:10px}
+details.dbg{border:1px solid var(--rule);border-radius:10px;background:var(--surface)}
+.dbgHead{display:flex;align-items:center;gap:10px;padding:8px 10px;cursor:pointer;list-style:none}
+.dbgHead::-webkit-details-marker{display:none}
+.dbgHead img,.dbgNoImg{width:44px;height:44px;border-radius:6px;object-fit:cover;flex:none;background:#000}
+.dbgText{flex:1;min-width:0}
+.dbgStatus{flex:none;font-size:12px;font-weight:600;padding:2px 8px;border-radius:10px}
+.dbgStatus.good{color:var(--done)}.dbgStatus.bad{color:var(--rec)}.dbgStatus.wait{color:var(--graphite)}
+.dbgBody{padding:0 10px 10px}
+.dbgBody h3{font-size:12px;font-weight:600;color:var(--graphite);margin:12px 0 0}
+.dbgPhoto{display:block;max-width:100%;max-height:40vh;border-radius:6px;margin-top:4px}
+details.dbgCheck{margin-top:10px;border-top:1px solid var(--rule);padding-top:6px}
+details.dbgCheck>summary{font-size:13px;cursor:pointer}
 .modal{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:flex-end;justify-content:center;z-index:10}
 .sheet{
   background:var(--surface);width:100%;max-width:720px;max-height:88vh;overflow:auto;
@@ -618,9 +638,17 @@ textarea:focus,input:focus,select:focus{outline:none;border-color:var(--ink)}
     </div>
   </section>
   <div id="latestNote" class="latestNote"></div>
-  <details id="stateBox" class="tracked hidden"><summary>Tracked details</summary><pre id="state"></pre></details>
+  <details id="stateBox" class="tracked hidden"><summary>Tracked details</summary><pre id="state" class="code"></pre></details>
 
   <section id="frames"></section>
+
+  <details class="settings" id="debugBox">
+    <summary>Debug <span id="debugCount" class="trigCount"></span></summary>
+    <div class="hint">The last 10 photos, each with exactly what was sent to the model and what came back. Kept in memory only and cleared when a new session starts.</div>
+    <div class="presetBar"><button type="button" class="chip" id="debugCopy">Copy as JSON</button></div>
+    <div id="debugHint" class="hint" aria-live="polite"></div>
+    <div id="debugList" class="dbgList"></div>
+  </details>
 
   <div id="editor" class="editor hidden" role="dialog" aria-modal="true" aria-labelledby="edTitle">
     <div class="edHead">
@@ -699,6 +727,7 @@ const PAGE_JS = String.raw`
   const modelQuirks = {}; // per model: parameters it rejected, so they aren't sent again
   const REQUEST_TIMEOUT_MS = 90000;
   const KEEP_FRAMES = 3;
+  const DEBUG_KEEP = 10; // photos kept in the debug log (memory only)
   const LS_KEY = "vision-session-store-v2";
   const LS_OLD = "vision-session-settings-v1";
   const PRESET_IDS = ["preset", "pUpdate", "pNew", "pDelete", "pName", "pSave", "pCancel", "modelCustom", "kChange", "kRefresh", "iRefine", "iExpand", "applePhotos"];
@@ -760,6 +789,7 @@ const PAGE_JS = String.raw`
   wireAccount();
   wireTriggers();
   wireEditor();
+  wireDebug();
   $("applePhotos").addEventListener("change", () => { cfg.applePhotos = $("applePhotos").checked; persist(); });
   wireZoom();
   $("accumulate").addEventListener("change", () => { cfg.accumulate = $("accumulate").checked; persist(); updateModeUI(); });
@@ -1146,7 +1176,7 @@ const PAGE_JS = String.raw`
     return {
       running: false, stream: null, ctrl: null, frames: [], state: {}, summary: "",
       seq: 0, busyIdx: 0, nextAt: 0, fatal: null, wake: null, sleepTimer: null,
-      trig: {}, trigOrder: [],
+      trig: {}, trigOrder: [], debug: [],
       stats: { photos: 0, requests: 0, ok: 0, failed: 0, cancelled: 0, checks: 0, fired: 0,
                prompt: 0, completion: 0, total: 0, latency: 0, start: 0, end: 0 },
     };
@@ -1237,9 +1267,12 @@ const PAGE_JS = String.raw`
     renderAll(); tickClock();
 
     sess.stats.requests++;
+    const dbg = addDebug(sess, frame, "OpenAI");
     const t0 = Date.now();
     try {
-      const { result, usage } = await analyze(sess, frame);
+      const { result, usage } = await analyze(sess, frame, dbg);
+      dbg.parsed = result;
+      dbg.usage = { input_tokens: usage.prompt_tokens || 0, output_tokens: usage.completion_tokens || 0, total_tokens: usage.total_tokens || 0 };
       frame.ms = Date.now() - t0;
       frame.tokens = usage.total_tokens || 0;
       frame.text = result.frame;
@@ -1257,9 +1290,12 @@ const PAGE_JS = String.raw`
       frame.error = e.message;
       if (e.cancelled) sess.stats.cancelled++;
       else sess.stats.failed++;
+      dbg.error = e.message;
+      if (e.attempts) { dbg.attempts = e.attempts; dbg.dropped = e.dropped || []; }
       if (e.fatal) sess.fatal = "OpenAI request stopped the session: " + e.message;
       else if (!e.cancelled && sess === S) showError("Photo #" + frame.idx + " wasn't analyzed: " + e.message + ". The session keeps going.");
     } finally {
+      dbg.ms = Date.now() - t0;
       frame.pending = false;
       sess.busyIdx = 0;
       if (sess === S) renderAll();
@@ -1273,16 +1309,20 @@ const PAGE_JS = String.raw`
     sess.busyIdx = frame.idx;
     renderAll(); tickClock();
     sess.stats.requests++;
+    const dbg = addDebug(sess, frame, "Apple Intelligence");
     const t0 = Date.now();
     try {
       const prompt = systemPrompt(true) + "\n\n" + frameContext(sess, frame) + "\n\nThe photo for this frame is attached.";
+      dbg.request = { prompt: prompt };
       const wantPhoto = cfg.applePhotos !== false;
       frame.noPhoto = !wantPhoto;
       const r = await withShortcutLock(() => nativeCall("apple", { shortcut: cfg.shortcut, prompt: prompt, wantPhoto: wantPhoto }, 180000));
       if (r.photo) frame.img = r.photo;
       if (r.photo || (!wantPhoto && r.text)) sess.stats.photos++;
+      dbg.raw = r.text || "";
       if (!r.text) throw new Error("the shortcut returned no text. End it with Stop and Output set to the model's Response");
       const result = parseResult(r.text);
+      dbg.parsed = result;
       frame.ms = Date.now() - t0;
       frame.text = result.frame;
       sess.stats.ok++;
@@ -1296,9 +1336,11 @@ const PAGE_JS = String.raw`
       frame.error = e.message;
       if (e.cancelled) sess.stats.cancelled++;
       else sess.stats.failed++;
+      dbg.error = e.message;
       if (e.fatal || e.bridgeDown) sess.fatal = "Apple Intelligence stopped the session: " + e.message;
       else if (!e.cancelled && sess === S) showError("Photo #" + frame.idx + " wasn't analyzed: " + e.message + ". The session keeps going.");
     } finally {
+      dbg.ms = Date.now() - t0;
       frame.pending = false;
       sess.busyIdx = 0;
       if (sess === S) renderAll();
@@ -1519,6 +1561,170 @@ const PAGE_JS = String.raw`
       body.reasoning = { effort: "low" };
     }
     return body;
+  }
+
+  // ── debug log: the last 10 photos with what was sent and what came back ──
+  // Kept in memory only (never written to disk) and cleared when a session starts.
+
+  function addDebug(sess, frame, engine) {
+    const entry = {
+      id: "d-" + frame.idx, idx: frame.idx, time: frame.time, frame: frame,
+      engine: engine, model: engine === "OpenAI" ? cfg.model : cfg.shortcut,
+      mode: isMoment() ? "fresh each photo" : "built up over the session",
+      request: null, raw: "", parsed: null, usage: null, ms: 0, attempts: 0, dropped: [], error: "", checks: [],
+    };
+    sess.debug.unshift(entry);
+    if (sess.debug.length > DEBUG_KEEP) sess.debug.length = DEBUG_KEEP;
+    return entry;
+  }
+
+  function imageInfo(dataUrl) {
+    if (!dataUrl) return null;
+    const kb = Math.round((dataUrl.length - dataUrl.indexOf(",") - 1) * 0.75 / 1024);
+    return "JPEG, " + kb + " KB";
+  }
+
+  function escHTML(s) {
+    return String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  }
+
+  // Colours JSON tokens: keys, strings, numbers, true/false/null, brackets.
+  function highlightJSON(text) {
+    const src = String(text);
+    const re = /("(?:\\.|[^"\\\n])*")(\s*:)?|\b(true|false|null)\b|(-?\b\d+(?:\.\d+)?(?:[eE][+-]?\d+)?\b)|([{}\[\],])/g;
+    let out = "", last = 0, m;
+    while ((m = re.exec(src))) {
+      out += escHTML(src.slice(last, m.index));
+      if (m[1]) out += m[2] ? '<span class="jk">' + escHTML(m[1]) + "</span>" + escHTML(m[2]) : '<span class="js">' + escHTML(m[1]) + "</span>";
+      else if (m[3]) out += '<span class="jb">' + m[3] + "</span>";
+      else if (m[4]) out += '<span class="jn">' + m[4] + "</span>";
+      else out += '<span class="jp">' + escHTML(m[5]) + "</span>";
+      last = re.lastIndex;
+    }
+    return out + escHTML(src.slice(last));
+  }
+
+  // Plain text with any embedded JSON blocks highlighted, and LABELS: in bold.
+  function highlightMixed(text) {
+    const src = String(text || "");
+    let out = "", i = 0;
+    const plain = (t) => escHTML(t).replace(/^([ \t]*)([A-Z][A-Z0-9 ()\-]{2,}:)/gm, '$1<span class="jl">$2</span>');
+    while (i < src.length) {
+      const next = src.slice(i).search(/[{\[]/);
+      if (next === -1) { out += plain(src.slice(i)); break; }
+      const at = i + next;
+      const end = balancedEnd(src, at);
+      if (end !== -1 && parseLooseJSON(src.slice(at, end))) {
+        out += plain(src.slice(i, at)) + highlightJSON(src.slice(at, end));
+        i = end;
+      } else {
+        out += plain(src.slice(i, at + 1));
+        i = at + 1;
+      }
+    }
+    return out;
+  }
+
+  function codeBlock(html, extra) {
+    const pre = el("pre", "code" + (extra ? " " + extra : ""));
+    pre.innerHTML = html;
+    return pre;
+  }
+
+  function renderDebug() {
+    const box = $("debugList");
+    const list = S.debug || [];
+    $("debugCount").textContent = list.length ? list.length + " of " + DEBUG_KEEP : "";
+    $("debugCopy").disabled = !list.length;
+    const open = new Set(Array.from(box.querySelectorAll("details.dbg[open]")).map((d) => d.dataset.id));
+    box.textContent = "";
+    if (!list.length) {
+      box.appendChild(el("div", "hint", "Start a session to see exactly what is sent to the model and what comes back for each photo."));
+      return;
+    }
+    list.forEach((e) => {
+      const d = el("details", "dbg");
+      d.dataset.id = e.id;
+      const head = el("summary", "dbgHead");
+      if (e.frame.img) {
+        const t = new Image();
+        t.src = e.frame.img;
+        t.alt = "";
+        head.appendChild(t);
+      } else head.appendChild(el("span", "dbgNoImg"));
+      const status = e.frame.pending ? "waiting for the reply" : e.error ? "error" : "ok";
+      const bits = [e.engine, e.ms ? (e.ms / 1000).toFixed(1) + " s" : "", e.usage && e.usage.total_tokens ? fmtNum(e.usage.total_tokens) + " tokens" : "", e.checks.length ? e.checks.length + " trigger check" + (e.checks.length === 1 ? "" : "s") : ""].filter(Boolean);
+      const txt = el("div", "dbgText");
+      txt.append(el("b", null, "#" + e.idx + " at " + e.time), el("span", "tsub", bits.join(", ")));
+      head.append(txt, el("span", "dbgStatus " + (e.error ? "bad" : e.frame.pending ? "wait" : "good"), status));
+      d.appendChild(head);
+      const body = el("div", "dbgBody");
+      d.appendChild(body);
+      d.addEventListener("toggle", () => { if (d.open && !body.childNodes.length) fillDebug(body, e); });
+      box.appendChild(d);
+      if (open.has(e.id)) d.open = true;
+    });
+  }
+
+  function fillDebug(body, e) {
+    const section = (title, node) => { body.appendChild(el("h3", null, title)); body.appendChild(node); };
+    const meta = {
+      engine: e.engine, model: e.model, summary_mode: e.mode, time: e.time,
+      seconds: e.ms ? +(e.ms / 1000).toFixed(2) : null,
+      attempts: e.attempts || null, dropped_settings: e.dropped.length ? e.dropped : undefined,
+      usage: e.usage || undefined, photo: imageInfo(e.frame.img) || (e.frame.noPhoto ? "not shown (clipboard reading is off)" : null),
+    };
+    section("Overview", codeBlock(highlightJSON(JSON.stringify(meta, null, 2))));
+    if (e.frame.img) {
+      const img = new Image();
+      img.src = e.frame.img;
+      img.alt = "Photo #" + e.idx;
+      img.className = "dbgPhoto";
+      section("Photo", img);
+    }
+    if (e.request && e.request.instructions) section("Sent: instructions", codeBlock(highlightMixed(e.request.instructions)));
+    if (e.request && e.request.text) section("Sent: with the photo", codeBlock(highlightMixed(e.request.text)));
+    if (e.request && e.request.settings) section("Sent: request settings", codeBlock(highlightJSON(JSON.stringify(e.request.settings, null, 2))));
+    if (e.request && e.request.prompt) section("Sent: prompt", codeBlock(highlightMixed(e.request.prompt)));
+    if (e.raw) section("Reply as received", codeBlock(highlightMixed(e.raw)));
+    if (e.parsed) section("Reply as understood", codeBlock(highlightJSON(JSON.stringify(e.parsed, null, 2))));
+    if (e.error) section("Error", codeBlock(escHTML(e.error), "bad"));
+    e.checks.forEach((c) => {
+      const d = el("details", "dbgCheck");
+      d.appendChild(el("summary", null, "Trigger check: " + c.trigger + " at " + c.time + (c.error ? " (error)" : c.verdict ? (c.verdict.met ? " (met)" : " (not met)") : "")));
+      const inner = el("div");
+      const add = (title, node) => { inner.appendChild(el("h3", null, title)); inner.appendChild(node); };
+      add("Sent", codeBlock(highlightMixed(c.prompt)));
+      if (c.raw) add("Reply as received", codeBlock(highlightMixed(c.raw)));
+      if (c.verdict) add("Reply as understood", codeBlock(highlightJSON(JSON.stringify(c.verdict, null, 2))));
+      if (c.error) add("Error", codeBlock(escHTML(c.error), "bad"));
+      d.appendChild(inner);
+      body.appendChild(d);
+    });
+  }
+
+  function debugExport() {
+    return JSON.stringify((S.debug || []).map((e) => ({
+      photo: "#" + e.idx, time: e.time, engine: e.engine, model: e.model, summary_mode: e.mode,
+      image: imageInfo(e.frame.img), seconds: e.ms ? +(e.ms / 1000).toFixed(2) : null,
+      attempts: e.attempts, dropped_settings: e.dropped, usage: e.usage,
+      request: e.request, reply_raw: e.raw, reply_parsed: e.parsed, error: e.error || undefined, trigger_checks: e.checks,
+    })), null, 2);
+  }
+
+  function wireDebug() {
+    $("debugCopy").addEventListener("click", async () => {
+      const text = debugExport();
+      const done = (msg) => { $("debugHint").textContent = msg; };
+      try {
+        await nativeCall("copy", { text: text }, 10000);
+        done("Copied " + (S.debug || []).length + " entries as JSON (without the photos).");
+      } catch (_) {
+        try { await navigator.clipboard.writeText(text); done("Copied as JSON (without the photos)."); }
+        catch (e2) { done("Couldn't copy: " + e2.message); }
+      }
+    });
+    renderDebug();
   }
 
   // ── instructions editor and AI refine ──
@@ -1768,11 +1974,15 @@ const PAGE_JS = String.raw`
     st.busy = true;
     st.status = "checking";
     renderTriggerStatus();
+    const prompt = triggerPrompt(sess, st.t);
+    const log = { trigger: st.t.name, time: new Date().toLocaleTimeString(), prompt: prompt, raw: "", verdict: null, error: "" };
+    const host = sess.debug[0];
+    if (host) { host.checks.push(log); if (host.checks.length > 10) host.checks.shift(); }
     try {
       let verdict;
-      const prompt = triggerPrompt(sess, st.t);
       if (isApple()) {
         const text = await withShortcutLock(() => nativeCall("appleText", { shortcut: cfg.checkShortcut, text: prompt }, 180000));
+        log.raw = text || "";
         verdict = parseVerdict(text);
       } else {
         const r = await openaiRequest(sess, () => withModelOptions({
@@ -1784,18 +1994,21 @@ const PAGE_JS = String.raw`
         sess.stats.prompt += r.usage.prompt_tokens || 0;
         sess.stats.completion += r.usage.completion_tokens || 0;
         sess.stats.total += r.usage.total_tokens || 0;
+        log.raw = r.text;
         verdict = parseVerdict(r.text);
       }
+      log.verdict = verdict;
       if (!sess.running) return;
       await applyVerdict(sess, st, verdict);
     } catch (e) {
+      log.error = e.message;
       if (e.cancelled) return;
       st.status = "error";
       st.error = e.message;
     } finally {
       st.busy = false;
       st.nextAt = Date.now() + st.t.every * 1000;
-      if (sess === S) renderTriggerStatus();
+      if (sess === S) { renderTriggerStatus(); renderDebug(); }
     }
   }
 
@@ -2007,23 +2220,52 @@ const PAGE_JS = String.raw`
   }
 
 
-  async function analyze(sess, frame) {
-    const r = await openaiRequest(sess, () => buildBody(sess, frame));
-    return { result: parseResult(r.text), usage: r.usage };
+  async function analyze(sess, frame, dbg) {
+    const r = await openaiRequest(sess, () => {
+      const body = buildBody(sess, frame);
+      if (dbg) dbg.request = requestForDebug(body);
+      return body;
+    });
+    const result = parseResult(r.text);
+    if (dbg) { dbg.raw = r.text; dbg.attempts = r.attempts; dbg.dropped = r.dropped; }
+    return { result: result, usage: r.usage };
+  }
+
+  // The request as sent, minus the photo bytes (shown separately).
+  function requestForDebug(body) {
+    const content = (body.input && body.input[0] && body.input[0].content) || [];
+    const textPart = content.find((c) => c.type === "input_text");
+    const imgPart = content.find((c) => c.type === "input_image");
+    return {
+      instructions: body.instructions || "",
+      text: textPart ? textPart.text : "",
+      settings: {
+        model: body.model,
+        image: imgPart ? { size: imageInfo(imgPart.image_url), detail: imgPart.detail } : null,
+        max_output_tokens: body.max_output_tokens,
+        json_format: !!body.text,
+        reasoning: body.reasoning ? body.reasoning.effort : null,
+        store: body.store,
+      },
+    };
   }
 
   // If a model rejects an optional parameter, drop it and try again.
   async function openaiRequest(sess, makeBody) {
+    const dropped = [];
     for (let attempt = 0; attempt < 3; attempt++) {
       const body = makeBody();
       try {
-        return await sendOpenAI(sess, body);
+        const r = await sendOpenAI(sess, body);
+        return Object.assign(r, { body: body, attempts: attempt + 1, dropped: dropped });
       } catch (e) {
+        e.attempts = attempt + 1;
+        e.dropped = dropped;
         if (e.status !== 400 || !sess.running) throw e;
         const q = (modelQuirks[cfg.model] = modelQuirks[cfg.model] || {});
         const what = String(e.param || "") + " " + e.message;
-        if (body.reasoning && /reasoning/i.test(what)) { q.noReasoning = true; continue; }
-        if (body.text && /(text\.format|json_object|response_format)/i.test(what)) { q.noJson = true; continue; }
+        if (body.reasoning && /reasoning/i.test(what)) { q.noReasoning = true; dropped.push("reasoning (" + e.message + ")"); continue; }
+        if (body.text && /(text\.format|json_object|response_format)/i.test(what)) { q.noJson = true; dropped.push("JSON format (" + e.message + ")"); continue; }
         throw e;
       }
     }
@@ -2242,7 +2484,7 @@ const PAGE_JS = String.raw`
   }
 
   // ── rendering ──
-  function renderAll() { renderStats(); renderSummary(); renderFrames(); }
+  function renderAll() { renderStats(); renderSummary(); renderFrames(); renderDebug(); }
 
   function renderStats() {
     const st = S.stats;
@@ -2276,7 +2518,7 @@ const PAGE_JS = String.raw`
     if (!S.summary) shownSummary = "";
     const hasState = S.state && Object.keys(S.state).length > 0;
     $("stateBox").classList.toggle("hidden", !hasState);
-    $("state").textContent = hasState ? JSON.stringify(S.state, null, 2) : "";
+    $("state").innerHTML = hasState ? highlightJSON(JSON.stringify(S.state, null, 2)) : "";
   }
 
   function renderFrames() {
