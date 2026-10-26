@@ -514,6 +514,16 @@ textarea:focus,input:focus,select:focus{outline:none;border-color:var(--ink)}
       </div>
       <label for="tShortcut">Shortcut to run</label>
       <input id="tShortcut" placeholder="Exact shortcut name" autocapitalize="off" autocorrect="off" spellcheck="false">
+      <label for="tSend">Send to the shortcut</label>
+      <select id="tSend">
+        <option value="summary">The capture summary</option>
+        <option value="custom">A custom message</option>
+      </select>
+      <div id="tMsgBox" class="hidden">
+        <label for="tMsg">Message</label>
+        <textarea id="tMsg" rows="2" placeholder="Gate opened for {reason} at {time}"></textarea>
+        <div class="hint">Optional placeholders, filled in when the trigger runs: {summary} the capture summary, {reason} why the condition was met, {name} the trigger's name, {time} the time.</div>
+      </div>
       <div class="presetBar">
         <button type="button" class="chip primary" id="tSave">Save trigger</button>
         <button type="button" class="chip danger" id="tDelete">Delete trigger</button>
@@ -623,7 +633,7 @@ const PAGE_JS = String.raw`
     total: BOOT.modelsTotal || 0,
   };
   const FIELDS = ["instructions", "interval", "engine", "shortcut", "checkShortcut", "model", "detail", "maxSide", "facing"];
-  const TRIG_IDS = ["accumulate", "tAdd", "tName", "tCond", "tEvery", "tMode", "tShortcut", "tSave", "tDelete", "tCancel"];
+  const TRIG_IDS = ["accumulate", "tAdd", "tName", "tCond", "tEvery", "tMode", "tShortcut", "tSend", "tMsg", "tSave", "tDelete", "tCancel"];
   const DEFAULTS = {
     instructions: "Count the different people you see and summarize them: appearance, what they are doing, and when they first appeared.",
     interval: 10,
@@ -1012,8 +1022,8 @@ const PAGE_JS = String.raw`
     $("tEveryBox").classList.toggle("hidden", moment);
     $("tGrid").style.gridTemplateColumns = moment ? "1fr" : "";
     $("trigHint").textContent = moment
-      ? "With every photo, the model also answers each trigger's condition for that moment. When it's met, the trigger runs your shortcut with the photo's summary as its input."
-      : "Every N seconds a trigger asks the model whether its condition is met by the summary so far. When it is, the trigger runs your shortcut with the summary text as its input.";
+      ? "With every photo, the model also answers each trigger's condition for that moment. When it's met, the trigger runs your shortcut and sends it the photo's summary or your own message."
+      : "Every N seconds a trigger asks the model whether its condition is met by the summary so far. When it is, the trigger runs your shortcut and sends it the summary or your own message.";
     renderTriggerList();
     renderSummary();
   }
@@ -1491,7 +1501,7 @@ const PAGE_JS = String.raw`
     }
     st.status = "firing";
     renderTriggerStatus();
-    const text = sess.summary;
+    const text = shortcutInput(sess, st);
     await withShortcutLock(() => nativeCall("runShortcut", { shortcut: st.t.shortcut, text: text }, 600000));
     st.fired++;
     sess.stats.fired++;
@@ -1500,6 +1510,18 @@ const PAGE_JS = String.raw`
     st.flashUntil = Date.now() + 2500;
     st.status = "fired";
     if (mode === "once") st.done = true;
+  }
+
+  // What the trigger's shortcut receives as Shortcut Input.
+  function shortcutInput(sess, st) {
+    if (st.t.send !== "custom") return sess.summary;
+    const values = {
+      summary: sess.summary || "",
+      reason: st.reason || "",
+      name: st.t.name,
+      time: new Date().toLocaleTimeString(),
+    };
+    return String(st.t.message || "").replace(/\{(summary|reason|name|time)\}/gi, (m, key) => values[key.toLowerCase()]);
   }
 
   // Fresh mode: the photo's own answer says which conditions are met right now.
@@ -1596,7 +1618,7 @@ const PAGE_JS = String.raw`
       const sw = makeSwitch(t.enabled !== false, "Trigger " + t.name + " on", (on) => setTriggerEnabled(t.id, on));
       const txt = el("div", "tText");
       const modeText = { rise: "each time it becomes true", once: "only the first time", every: "every check while true" }[t.mode || "rise"];
-      txt.append(el("b", null, t.name), el("span", "tsub", t.condition), el("span", "tsub", (isMoment() ? "Checked with every photo" : "Checks every " + t.every + " s") + "; runs \u201C" + t.shortcut + "\u201D " + modeText + "."));
+      txt.append(el("b", null, t.name), el("span", "tsub", t.condition), el("span", "tsub", (isMoment() ? "Checked with every photo" : "Checks every " + t.every + " s") + "; runs \u201C" + t.shortcut + "\u201D " + modeText + ", sending " + (t.send === "custom" ? "a custom message" : "the summary") + "."));
       const edit = el("button", "chip", "Edit");
       edit.type = "button";
       edit.disabled = S.running;
@@ -1609,13 +1631,16 @@ const PAGE_JS = String.raw`
   }
 
   function openTriggerForm(id) {
-    const t = triggers.find((x) => x.id === id) || { name: "", condition: "", every: 30, mode: "rise", shortcut: "" };
+    const t = triggers.find((x) => x.id === id) || { name: "", condition: "", every: 30, mode: "rise", shortcut: "", send: "summary", message: "" };
     editingTrigger = id || null;
     $("tName").value = t.name;
     $("tCond").value = t.condition;
     $("tEvery").value = String(t.every);
     $("tMode").value = t.mode || "rise";
     $("tShortcut").value = t.shortcut;
+    $("tSend").value = t.send === "custom" ? "custom" : "summary";
+    $("tMsg").value = t.message || "";
+    $("tMsgBox").classList.toggle("hidden", $("tSend").value !== "custom");
     $("tDelete").classList.toggle("hidden", !id);
     $("tHint").textContent = "";
     $("trigForm").classList.remove("hidden");
@@ -1625,6 +1650,11 @@ const PAGE_JS = String.raw`
   function wireTriggers() {
     $("tAdd").addEventListener("click", () => openTriggerForm(null));
     $("tCancel").addEventListener("click", () => $("trigForm").classList.add("hidden"));
+    $("tSend").addEventListener("change", () => {
+      const custom = $("tSend").value === "custom";
+      $("tMsgBox").classList.toggle("hidden", !custom);
+      if (custom) $("tMsg").focus();
+    });
     $("tSave").addEventListener("click", () => {
       const name = $("tName").value.trim();
       const condition = $("tCond").value.trim();
@@ -1633,7 +1663,10 @@ const PAGE_JS = String.raw`
       if (!name) { $("tHint").textContent = "Give the trigger a name."; return $("tName").focus(); }
       if (!condition) { $("tHint").textContent = "Describe the condition to check."; return $("tCond").focus(); }
       if (!shortcut) { $("tHint").textContent = "Enter the exact name of the shortcut to run."; return $("tShortcut").focus(); }
-      const data = { name: name, condition: condition, shortcut: shortcut, every: every, mode: $("tMode").value };
+      const send = $("tSend").value;
+      const message = $("tMsg").value.trim();
+      if (send === "custom" && !message) { $("tHint").textContent = "Write the message to send, or choose to send the capture summary."; return $("tMsg").focus(); }
+      const data = { name: name, condition: condition, shortcut: shortcut, every: every, mode: $("tMode").value, send: send, message: message };
       const existing = triggers.find((x) => x.id === editingTrigger);
       if (existing) Object.assign(existing, data);
       else triggers.push(Object.assign({ id: "t-" + Date.now().toString(36), enabled: true }, data));

@@ -31,7 +31,7 @@
 - **Your instructions.** It does whatever you describe, such as "Count the different people and summarize them" or "Read the license plate of any car at the gate". Save instructions you like as presets.
 - **Latest photo next to the summary.** The newest photo is large, with the summary beside it. The two photos before it are shown smaller, and that's all: photos are never saved.
 - **Two summary modes.** Each photo can build on one running summary for the whole session, or be judged fresh on its own (see [Modes](#modes)).
-- **Triggers.** A trigger has a plain-language condition, such as "A car with plate KXA 482 is at the gate", and a shortcut to run. When the model says the condition is met, the shortcut runs with the summary text as its input. Live rows show which triggers are waiting, checking or have fired, and each one can be switched on or off at any time.
+- **Triggers.** A trigger has a plain-language condition, such as "A car with plate KXA 482 is at the gate", and a shortcut to run. When the model says the condition is met, the shortcut runs and receives the capture summary or your own message. Live rows show which triggers are waiting, checking or have fired, and each one can be switched on or off at any time.
 - **Session stats.** At the end you see the duration, photos taken, requests sent, tokens used, and how many times each trigger fired.
 - **OpenAI or Apple Intelligence.** Use any image-capable OpenAI model from your account, or Apple Intelligence through Shortcuts with no API key.
 
@@ -83,7 +83,12 @@ Each trigger has a name, a condition, the shortcut to run, and when to run it:
 - **Only the first time**: runs at most once per session.
 - **Every check while true**: runs on every check where the condition is met.
 
-The shortcut receives the summary text as its **Shortcut Input**. For example, a shortcut can use *Show Notification* with Shortcut Input, or *Control Home* to open a gate. Running a shortcut briefly switches to the Shortcuts app and back, and only one shortcut runs at a time.
+Each trigger also chooses what its shortcut receives as **Shortcut Input**:
+
+- **The capture summary**: the running summary, or in fresh mode what the latest photo shows.
+- **A custom message** you type, such as `Gate opened for {reason} at {time}`. The placeholders `{summary}`, `{reason}` (why the condition was met), `{name}` (the trigger's name) and `{time}` are filled in when it runs.
+
+For example, a shortcut can use *Show Notification* with Shortcut Input, or *Control Home* to open a gate. Running a shortcut briefly switches to the Shortcuts app and back, and only one shortcut runs at a time.
 
 ## Apple Intelligence setup
 
