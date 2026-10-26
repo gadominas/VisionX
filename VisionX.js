@@ -356,8 +356,16 @@ textarea:focus,input:focus,select:focus{outline:none;border-color:var(--ink)}
 .chip:focus-visible{outline:3px solid var(--done);outline-offset:2px}
 
 .control{display:flex;align-items:center;gap:12px;margin-bottom:12px}
-.live{width:72px;height:72px;border-radius:12px;object-fit:cover;background:#000;flex:none}
-.live.mirror{transform:scaleX(-1)}
+.liveWrap{width:72px;height:72px;border-radius:12px;overflow:hidden;background:#000;flex:none;transition:width .25s,height .25s}
+.liveWrap.aiming{width:150px;height:150px}
+.live{display:block;width:100%;height:100%;object-fit:cover;transform-origin:center}
+.zoomRow{display:flex;align-items:center;gap:10px;margin:-2px 0 12px}
+.zoomRow label{margin:0;font-size:13px;color:var(--graphite);flex:none}
+.zoomRow input[type=range]{flex:1;width:auto;margin:0;padding:0;background:transparent;border:0;accent-color:var(--done);height:28px}
+.zoomRow output{flex:none;min-width:3.2em;text-align:right;font-weight:600}
+.zoomRow .chip{height:30px;padding:0 10px;flex:none}
+.zoomHint{font-size:12px;color:var(--graphite);margin:-8px 0 12px}
+@media (prefers-reduced-motion:reduce){.liveWrap{transition:none}}
 .btn{
   flex:1;height:56px;border:0;border-radius:28px;font:600 17px/1 -apple-system,system-ui,sans-serif;
   color:#fff;background:var(--rec);cursor:pointer;
@@ -546,9 +554,16 @@ textarea:focus,input:focus,select:focus{outline:none;border-color:var(--ink)}
   </details>
 
   <div class="control">
-    <video id="live" class="live" playsinline muted autoplay></video>
+    <div class="liveWrap" id="liveWrap"><video id="live" class="live" playsinline muted autoplay></video></div>
     <button id="toggle" class="btn">Start session</button>
   </div>
+  <div class="zoomRow" id="zoomRow">
+    <label for="zoom">Zoom</label>
+    <input id="zoom" type="range" min="1" max="5" step="0.1" value="1" aria-describedby="zoomHint">
+    <output id="zoomVal" class="num" for="zoom">1.0×</output>
+    <button type="button" class="chip" id="zoomReset">1×</button>
+  </div>
+  <div class="zoomHint" id="zoomHint">Change it any time, even while capturing. The next photo uses it.</div>
 
   <div class="strip num">
     <div><b id="sElapsed">0:00</b><span>Elapsed</span></div>
@@ -641,6 +656,7 @@ const PAGE_JS = String.raw`
     detail: "auto",
     maxSide: 768,
     facing: "environment",
+    zoom: 1,
     engine: BOOT.apiKey ? "openai" : "apple",
     shortcut: BOOT.defaultShortcut,
     checkShortcut: "Vision Session Check",
@@ -655,6 +671,8 @@ const PAGE_JS = String.raw`
   let flashTimer = null;
   let editingTrigger = null;
   let shortcutChain = Promise.resolve();
+  let zoomState = { camera: 1, digital: 1 }; // camera = lens zoom applied by iOS, digital = crop on top
+  let zoomTimer = null, aimTimer = null;
   let rowEls = {};
   let shownSummary = "";
   let freshTimer = null;
@@ -674,6 +692,7 @@ const PAGE_JS = String.raw`
   persist();
   wireAccount();
   wireTriggers();
+  wireZoom();
   $("accumulate").addEventListener("change", () => { cfg.accumulate = $("accumulate").checked; persist(); updateModeUI(); });
   updateModeUI();
   $("checkShortcut").addEventListener("change", () => { cfg.checkShortcut = $("checkShortcut").value.trim() || DEFAULTS.checkShortcut; persist(); });
@@ -689,7 +708,9 @@ const PAGE_JS = String.raw`
     const apple = isApple();
     document.querySelectorAll(".oa").forEach((n) => n.classList.toggle("hidden", apple));
     $("appleBox").classList.toggle("hidden", !apple);
-    $("live").classList.toggle("hidden", apple);
+    $("liveWrap").classList.toggle("hidden", apple);
+    $("zoomRow").classList.toggle("hidden", apple);
+    $("zoomHint").classList.toggle("hidden", apple);
     $("checkBox").classList.toggle("hidden", !apple || isMoment());
   }
 
@@ -1217,14 +1238,72 @@ const PAGE_JS = String.raw`
       throw new Error("This WebView doesn't expose the camera API.");
     }
     sess.stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: { ideal: cfg.facing }, width: { ideal: 1280 }, height: { ideal: 720 } },
+      video: { facingMode: { ideal: cfg.facing }, width: { ideal: 1920 }, height: { ideal: 1080 } },
       audio: false,
     });
     const v = $("live");
-    v.classList.toggle("mirror", cfg.facing === "user");
     v.srcObject = sess.stream;
     await v.play().catch(() => {});
     await waitForVideo(v);
+    await applyZoom(sess);
+  }
+
+  // ── zoom ──
+  // Uses the camera's own zoom when iOS offers it (sharper), and crops the
+  // frame for anything beyond that (digital zoom).
+  async function applyZoom(sess) {
+    const want = Math.max(1, Number(cfg.zoom) || 1);
+    let camera = 1;
+    const track = sess.stream && sess.stream.getVideoTracks ? sess.stream.getVideoTracks()[0] : null;
+    if (track && track.getCapabilities) {
+      let caps = null;
+      try { caps = track.getCapabilities(); } catch (_) {}
+      if (caps && caps.zoom && typeof caps.zoom.max === "number" && caps.zoom.max > 1) {
+        const target = Math.min(caps.zoom.max, Math.max(caps.zoom.min || 1, want));
+        try {
+          await track.applyConstraints({ advanced: [{ zoom: target }] });
+          camera = target;
+        } catch (_) {}
+      }
+    }
+    zoomState = { camera: camera, digital: Math.max(1, want / camera) };
+    updateZoomUI();
+  }
+
+  function updateZoomUI() {
+    const z = Math.max(1, Number(cfg.zoom) || 1);
+    $("zoom").value = String(z);
+    $("zoomVal").textContent = z.toFixed(1) + "\u00D7";
+    const v = $("live");
+    const mirror = cfg.facing === "user" ? "scaleX(-1) " : "";
+    v.style.transform = mirror + "scale(" + zoomState.digital + ")";
+    let kind = "";
+    if (S.stream && z > 1) {
+      kind = zoomState.camera > 1 && zoomState.digital > 1.01 ? " Camera zoom plus digital zoom."
+        : zoomState.camera > 1 ? " Camera zoom."
+        : " Digital zoom: the photo is cropped, so detail drops as you zoom in.";
+    }
+    $("zoomHint").textContent = "Change it any time, even while capturing. The next photo uses it." + kind;
+  }
+
+  function wireZoom() {
+    const setZoom = (z) => {
+      cfg.zoom = Math.round(Math.min(5, Math.max(1, z)) * 10) / 10;
+      // Preview straight away; settle the camera zoom once the slider stops.
+      zoomState.digital = Math.max(1, cfg.zoom / zoomState.camera);
+      updateZoomUI();
+      clearTimeout(zoomTimer);
+      zoomTimer = setTimeout(() => { if (S.stream) applyZoom(S); persist(); }, 200);
+      // Enlarge the live preview briefly so you can aim.
+      if (S.stream) {
+        $("liveWrap").classList.add("aiming");
+        clearTimeout(aimTimer);
+        aimTimer = setTimeout(() => $("liveWrap").classList.remove("aiming"), 1500);
+      }
+    };
+    $("zoom").addEventListener("input", () => setZoom(parseFloat($("zoom").value)));
+    $("zoomReset").addEventListener("click", () => setZoom(1));
+    updateZoomUI();
   }
   // Running a trigger shortcut switches apps, which can stop the camera. Reopen it if so.
   async function ensureCamera(sess) {
@@ -1252,14 +1331,17 @@ const PAGE_JS = String.raw`
     const v = $("live");
     const w = v.videoWidth, h = v.videoHeight;
     if (!w || !h) throw new Error("The camera isn't delivering frames. Keep the app in the foreground.");
-    const scale = Math.min(1, cfg.maxSide / Math.max(w, h));
+    const d = Math.max(1, zoomState.digital || 1);
+    const sw = w / d, sh = h / d, sx = (w - sw) / 2, sy = (h - sh) / 2;
+    const scale = Math.min(1, cfg.maxSide / Math.max(sw, sh));
     const cv = $("cv");
-    cv.width = Math.round(w * scale);
-    cv.height = Math.round(h * scale);
-    cv.getContext("2d").drawImage(v, 0, 0, cv.width, cv.height);
-    return cv.toDataURL("image/jpeg", 0.8);
+    cv.width = Math.round(sw * scale);
+    cv.height = Math.round(sh * scale);
+    cv.getContext("2d").drawImage(v, sx, sy, sw, sh, 0, 0, cv.width, cv.height);
+    return cv.toDataURL("image/jpeg", 0.85);
   }
   function stopCamera() {
+    zoomState = { camera: 1, digital: Math.max(1, Number(cfg.zoom) || 1) };
     if (S.stream) S.stream.getTracks().forEach((t) => t.stop());
     if (!S.stream && !$("live").srcObject) return;
     S.stream = null;
