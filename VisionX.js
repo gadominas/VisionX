@@ -508,7 +508,7 @@ textarea:focus,input:focus,select:focus{outline:none;border-color:var(--ink)}
           <li>Add <b>Take Photo</b> and turn off <b>Show Camera Preview</b>.</li>
           <li>Add <b>Resize Image</b> with width 768.</li>
           <li>Add <b>Copy to Clipboard</b> with the resized image (only needed with "Show each photo here" on).</li>
-          <li>Add <b>Use Model</b> and pick the cloud model (Private Cloud Compute). In its prompt, insert <b>Shortcut Input</b>, then the <b>Resized Image</b>.</li>
+          <li>Add <b>Use Model</b> and pick the cloud model (Private Cloud Compute). In its prompt, insert <b>Shortcut Input</b>, then the <b>Resized Image</b>. If it lets you pick the output type, choose <b>Text</b>.</li>
           <li>Add <b>Stop and Output</b> with the model's <b>Response</b>.</li>
           <li>Run it once from Shortcuts to grant camera access.</li>
         </ol>
@@ -1250,7 +1250,7 @@ const PAGE_JS = String.raw`
       sess.stats.total += usage.total_tokens || 0;
       if (result.state) sess.state = result.state;
       if (isMoment()) { sess.state = result.state || {}; sess.summary = result.summary || result.frame; sess.summaryAt = { idx: frame.idx, time: frame.time }; }
-      else if (result.summary) { sess.summary = result.summary; sess.summaryAt = { idx: frame.idx, time: frame.time }; }
+      else if (result.summary || result.frame) { sess.summary = result.summary || result.frame; sess.summaryAt = { idx: frame.idx, time: frame.time }; }
       if (isMoment()) handleMomentVerdicts(sess, result.triggers);
       if (sess === S) hideError();
     } catch (e) {
@@ -1275,7 +1275,7 @@ const PAGE_JS = String.raw`
     sess.stats.requests++;
     const t0 = Date.now();
     try {
-      const prompt = systemPrompt() + "\n\n" + frameContext(sess, frame) + "\n\nThe photo for this frame is attached.";
+      const prompt = systemPrompt(true) + "\n\n" + frameContext(sess, frame) + "\n\nThe photo for this frame is attached.";
       const wantPhoto = cfg.applePhotos !== false;
       frame.noPhoto = !wantPhoto;
       const r = await withShortcutLock(() => nativeCall("apple", { shortcut: cfg.shortcut, prompt: prompt, wantPhoto: wantPhoto }, 180000));
@@ -1289,7 +1289,7 @@ const PAGE_JS = String.raw`
       sess.stats.latency += frame.ms;
       if (result.state) sess.state = result.state;
       if (isMoment()) { sess.state = result.state || {}; sess.summary = result.summary || result.frame; sess.summaryAt = { idx: frame.idx, time: frame.time }; }
-      else if (result.summary) { sess.summary = result.summary; sess.summaryAt = { idx: frame.idx, time: frame.time }; }
+      else if (result.summary || result.frame) { sess.summary = result.summary || result.frame; sess.summaryAt = { idx: frame.idx, time: frame.time }; }
       if (isMoment()) handleMomentVerdicts(sess, result.triggers);
       if (sess === S) hideError();
     } catch (e) {
@@ -1422,8 +1422,9 @@ const PAGE_JS = String.raw`
   }
 
   // ── OpenAI ──
-  function systemPrompt() {
-    if (isMoment()) return momentPrompt();
+  // labelled = the simpler FRAME/SUMMARY/STATE format, used for Apple Intelligence.
+  function systemPrompt(labelled) {
+    if (isMoment()) return momentPrompt(labelled);
     return [
       "You analyze a live camera feed one frame at a time during a capture session.",
       "",
@@ -1436,15 +1437,21 @@ const PAGE_JS = String.raw`
       "- Keep the state compact (well under 2000 characters); merge or drop low-value detail when needed.",
       "- If the frame is dark, blurry or empty, say so and keep the state unchanged.",
       "",
+    ].concat(labelled ? [
+      "Respond in exactly this format and nothing else:",
+      "FRAME: 1-2 sentences on what THIS frame shows that matters for the task",
+      "SUMMARY: concise cumulative answer to the task for the whole session so far",
+      "STATE: the full updated cumulative state as compact JSON on a single line",
+    ] : [
       "Respond with JSON only, using exactly these keys:",
       '{"frame": "1-2 sentences on what THIS frame shows that matters for the task",',
       ' "state": { the full updated cumulative state },',
       ' "summary": "concise cumulative answer to the task for the whole session so far"}',
-    ].join("\n");
+    ]).join("\n");
   }
 
   // Fresh mode: every photo stands alone, and trigger conditions are judged on it directly.
-  function momentPrompt() {
+  function momentPrompt(labelled) {
     const active = S.trigOrder.filter((id) => !S.trig[id].off).map((id) => S.trig[id].t);
     const lines = [
       "You analyze single photos from a live camera. Each photo stands alone: judge only what is visible in THIS photo. Nothing carries over from earlier photos.",
@@ -1457,6 +1464,17 @@ const PAGE_JS = String.raw`
     if (active.length) {
       lines.push("", "CONDITIONS. For each one, decide from this photo alone whether it is met right now:");
       active.forEach((t) => lines.push('- "' + t.id + '": ' + t.condition));
+    }
+    if (labelled) {
+      lines.push(
+        "",
+        "Respond in exactly this format and nothing else:",
+        "FRAME: 1-2 sentences on what this photo shows that matters for the task",
+        "SUMMARY: concise answer to the task for this photo only",
+        "STATE: the details you counted or noticed in this photo, as compact JSON on a single line"
+      );
+      if (active.length) lines.push('TRIGGERS: {"<condition id>": {"met": true or false, "reason": "one short sentence"}} as JSON on a single line');
+      return lines.join("\n");
     }
     lines.push(
       "",
@@ -2081,21 +2099,68 @@ const PAGE_JS = String.raw`
     }
   }
 
+  // Accepts strict JSON, JSON with common slips (code fences, line breaks,
+  // trailing commas, curly quotes), or the labelled format used for Apple.
   function parseResult(text) {
-    try {
-      let src = String(text || "").trim();
-      const a = src.indexOf("{"), b = src.lastIndexOf("}");
-      if (a > 0 || (b !== -1 && b < src.length - 1)) src = src.slice(a, b + 1);
-      const j = JSON.parse(src);
-      return {
-        frame: typeof j.frame === "string" ? j.frame : JSON.stringify(j.frame || ""),
-        state: j.state && typeof j.state === "object" ? j.state : null,
-        summary: typeof j.summary === "string" ? j.summary : j.summary ? JSON.stringify(j.summary) : "",
-        triggers: normalizeVerdicts(j.triggers),
-      };
-    } catch (_) {
-      return { frame: text || "(empty response)", state: null, summary: "", triggers: null };
+    const raw = String(text || "").trim();
+    if (!raw) return { frame: "(empty response)", state: null, summary: "", triggers: null };
+    const j = parseLooseJSON(raw);
+    if (j && (j.summary != null || j.frame != null)) return fromReplyObject(j);
+    const labelled = parseLabelled(raw);
+    if (labelled) return labelled;
+    return {
+      frame: "The reply didn't follow the expected format, so it's shown as the summary.",
+      state: null,
+      summary: raw.slice(0, 2000),
+      triggers: null,
+      loose: true,
+    };
+  }
+
+  function parseLooseJSON(raw) {
+    const src = String(raw || "").replace(/\x60{3}(?:json)?/gi, "");
+    const a = src.indexOf("{"), b = src.lastIndexOf("}");
+    if (a === -1 || b <= a) return null;
+    const body = src.slice(a, b + 1);
+    const oneLine = body.replace(/\r?\n/g, " ");
+    const noTrailing = oneLine.replace(/,\s*([}\]])/g, "$1");
+    const straight = noTrailing.replace(/[\u201C\u201D\u201E\u201F]/g, '"').replace(/[\u2018\u2019]/g, "'");
+    for (const t of [body, oneLine, noTrailing, straight]) {
+      try {
+        const j = JSON.parse(t);
+        if (j && typeof j === "object") return j;
+      } catch (_) {}
     }
+    return null;
+  }
+
+  function fromReplyObject(j) {
+    let state = null;
+    if (j.state && typeof j.state === "object") state = j.state;
+    else if (typeof j.state === "string" && j.state.trim()) state = parseLooseJSON(j.state) || { notes: j.state };
+    return {
+      frame: typeof j.frame === "string" ? j.frame : JSON.stringify(j.frame || ""),
+      state: state,
+      summary: typeof j.summary === "string" ? j.summary : j.summary ? JSON.stringify(j.summary) : "",
+      triggers: normalizeVerdicts(typeof j.triggers === "string" ? parseLooseJSON(j.triggers) : j.triggers),
+    };
+  }
+
+  function parseLabelled(raw) {
+    const re = /^[\s*#>-]*(FRAME|SUMMARY|STATE|TRIGGERS)\s*\**\s*:\s*\**\s*/gim;
+    const marks = [];
+    let m;
+    while ((m = re.exec(raw))) marks.push({ key: m[1].toUpperCase(), start: m.index, body: re.lastIndex });
+    if (!marks.length) return null;
+    const parts = {};
+    marks.forEach((mk, i) => {
+      parts[mk.key] = raw.slice(mk.body, i + 1 < marks.length ? marks[i + 1].start : raw.length).trim();
+    });
+    if (!parts.SUMMARY && !parts.FRAME) return null;
+    let state = null;
+    if (parts.STATE) state = parseLooseJSON(parts.STATE) || { notes: parts.STATE };
+    const triggers = parts.TRIGGERS ? normalizeVerdicts(parseLooseJSON(parts.TRIGGERS)) : null;
+    return { frame: parts.FRAME || "", state: state, summary: parts.SUMMARY || parts.FRAME || "", triggers: triggers };
   }
 
   // ── timing ──

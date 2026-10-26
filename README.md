@@ -99,7 +99,7 @@ Scriptable can't call Apple Intelligence directly, so VisionX runs a shortcut th
 1. **Take Photo**, with *Show Camera Preview* turned off.
 2. **Resize Image**, width 768.
 3. **Copy to Clipboard**, with the resized image.
-4. **Use Model** (cloud). In the prompt, insert *Shortcut Input*, then the *Resized Image*.
+4. **Use Model** (cloud). In the prompt, insert *Shortcut Input*, then the *Resized Image*. If it lets you pick the output type, choose *Text*.
 5. **Stop and Output**, with the model's *Response*.
 
 Run it once from Shortcuts to grant camera access. With Apple Intelligence, each photo briefly opens Shortcuts. VisionX reads the photo from the clipboard and clears it straight away.
@@ -125,4 +125,5 @@ Both shortcut names can be changed in the app.
 
 - OpenAI calls go through Scriptable's native networking, using the Responses API. If a model rejects an optional setting, VisionX drops it and retries.
 - Token counts are shown for OpenAI. Apple doesn't report them.
+- Apple Intelligence is asked for a simple labelled reply (FRAME, SUMMARY, STATE). VisionX also reads JSON, fenced JSON and bold labels, and if a reply can't be read at all, it's shown as the summary rather than leaving it empty.
 - How well it reads plates, counts and judges conditions depends on the model, the light and the camera angle. Test a setup before relying on it.
