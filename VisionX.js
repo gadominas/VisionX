@@ -202,9 +202,13 @@ async function runAppleShortcut(p) {
   }
   const text = (res && (res.result || res.output)) || "";
   let photo = null;
-  const img = Pasteboard.pasteImage();
-  if (img) photo = "data:image/jpeg;base64," + Data.fromJPEG(img).toBase64String();
-  Pasteboard.copy(""); // the photo doesn't stay on the clipboard
+  // Reading the clipboard is what makes iOS ask "Allow Paste". With
+  // "Show each photo here" off, VisionX never reads it.
+  if (p.wantPhoto !== false) {
+    const img = Pasteboard.pasteImage();
+    if (img) photo = "data:image/jpeg;base64," + Data.fromJPEG(img).toBase64String();
+  }
+  Pasteboard.copy(""); // the photo doesn't stay on the clipboard (writing never prompts)
   return { text, photo };
 }
 
@@ -494,6 +498,8 @@ textarea:focus,input:focus,select:focus{outline:none;border-color:var(--ink)}
     <div id="appleBox" class="hidden">
       <label for="shortcut">Shortcut name</label>
       <input id="shortcut" autocapitalize="off" autocorrect="off" spellcheck="false">
+      <label class="switch"><input type="checkbox" id="applePhotos" role="switch"><span>Show each photo here</span></label>
+      <div class="hint">The photo comes back through the clipboard, so iOS asks you to allow pasting. To run hands-free, allow it once in iPhone Settings › Apps › Scriptable › Paste from Other Apps › Allow, or turn this off: the analysis and triggers still work, only the photo isn't shown.</div>
       <div class="hint">Each photo briefly opens Shortcuts, which takes the photo and asks Apple Intelligence, then returns here. Apple doesn't report token counts.</div>
       <details class="howto">
         <summary>Set up the shortcut once</summary>
@@ -501,7 +507,7 @@ textarea:focus,input:focus,select:focus{outline:none;border-color:var(--ink)}
           <li>In Shortcuts, create a shortcut with the name shown above.</li>
           <li>Add <b>Take Photo</b> and turn off <b>Show Camera Preview</b>.</li>
           <li>Add <b>Resize Image</b> with width 768.</li>
-          <li>Add <b>Copy to Clipboard</b> with the resized image.</li>
+          <li>Add <b>Copy to Clipboard</b> with the resized image (only needed with "Show each photo here" on).</li>
           <li>Add <b>Use Model</b> and pick the cloud model (Private Cloud Compute). In its prompt, insert <b>Shortcut Input</b>, then the <b>Resized Image</b>.</li>
           <li>Add <b>Stop and Output</b> with the model's <b>Response</b>.</li>
           <li>Run it once from Shortcuts to grant camera access.</li>
@@ -695,7 +701,7 @@ const PAGE_JS = String.raw`
   const KEEP_FRAMES = 3;
   const LS_KEY = "vision-session-store-v2";
   const LS_OLD = "vision-session-settings-v1";
-  const PRESET_IDS = ["preset", "pUpdate", "pNew", "pDelete", "pName", "pSave", "pCancel", "modelCustom", "kChange", "kRefresh", "iRefine", "iExpand"];
+  const PRESET_IDS = ["preset", "pUpdate", "pNew", "pDelete", "pName", "pSave", "pCancel", "modelCustom", "kChange", "kRefresh", "iRefine", "iExpand", "applePhotos"];
   const OTHER = "__other";
   // Shown when your model list can't be loaded. Pick "Other model ID…" for anything else.
   const COMMON_MODELS = ["gpt-5.5", "gpt-5.4", "gpt-5.4-mini", "gpt-5.4-nano", "gpt-5.2", "gpt-5.1", "gpt-5", "gpt-5-mini", "gpt-5-nano", "gpt-4.1", "gpt-4.1-mini", "gpt-4.1-nano", "gpt-4o", "gpt-4o-mini"];
@@ -719,6 +725,7 @@ const PAGE_JS = String.raw`
     engine: BOOT.apiKey ? "openai" : "apple",
     shortcut: BOOT.defaultShortcut,
     checkShortcut: "Vision Session Check",
+    applePhotos: true,
     accumulate: true,
   };
 
@@ -753,6 +760,7 @@ const PAGE_JS = String.raw`
   wireAccount();
   wireTriggers();
   wireEditor();
+  $("applePhotos").addEventListener("change", () => { cfg.applePhotos = $("applePhotos").checked; persist(); });
   wireZoom();
   $("accumulate").addEventListener("change", () => { cfg.accumulate = $("accumulate").checked; persist(); updateModeUI(); });
   updateModeUI();
@@ -1091,6 +1099,7 @@ const PAGE_JS = String.raw`
   function fillForm() {
     FIELDS.forEach((k) => { if (k !== "model") $(k).value = String(cfg[k]); });
     $("accumulate").checked = cfg.accumulate !== false;
+    $("applePhotos").checked = cfg.applePhotos !== false;
     populateModels();
   }
   function isMoment() { return cfg.accumulate === false; }
@@ -1267,8 +1276,11 @@ const PAGE_JS = String.raw`
     const t0 = Date.now();
     try {
       const prompt = systemPrompt() + "\n\n" + frameContext(sess, frame) + "\n\nThe photo for this frame is attached.";
-      const r = await withShortcutLock(() => nativeCall("apple", { shortcut: cfg.shortcut, prompt: prompt }, 180000));
-      if (r.photo) { frame.img = r.photo; sess.stats.photos++; }
+      const wantPhoto = cfg.applePhotos !== false;
+      frame.noPhoto = !wantPhoto;
+      const r = await withShortcutLock(() => nativeCall("apple", { shortcut: cfg.shortcut, prompt: prompt, wantPhoto: wantPhoto }, 180000));
+      if (r.photo) frame.img = r.photo;
+      if (r.photo || (!wantPhoto && r.text)) sess.stats.photos++;
       if (!r.text) throw new Error("the shortcut returned no text. End it with Stop and Output set to the model's Response");
       const result = parseResult(r.text);
       frame.ms = Date.now() - t0;
@@ -2180,7 +2192,7 @@ const PAGE_JS = String.raw`
       img.alt = "Photo #" + f.idx;
       return img;
     }
-    return el("div", "placeholder", f.pending ? "Taking the photo in Shortcuts…" : "No photo came back");
+    return el("div", "placeholder", f.pending ? "Taking the photo in Shortcuts…" : f.noPhoto ? "Photo not shown (\u201CShow each photo here\u201D is off)" : "No photo came back. Allow pasting for Scriptable to see it.");
   }
 
   function frameView(f) {

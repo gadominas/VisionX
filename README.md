@@ -104,6 +104,10 @@ Scriptable can't call Apple Intelligence directly, so VisionX runs a shortcut th
 
 Run it once from Shortcuts to grant camera access. With Apple Intelligence, each photo briefly opens Shortcuts. VisionX reads the photo from the clipboard and clears it straight away.
 
+**Run it hands-free.** Reading the clipboard makes iOS ask "Scriptable would like to paste from Shortcuts" for every photo. Either:
+- allow it once: iPhone **Settings › Apps › Scriptable › Paste from Other Apps › Allow**, or
+- turn off **Show each photo here** in VisionX. Analysis and triggers keep working; only the photo isn't shown, and step 3 isn't needed.
+
 **Vision Session Check** checks triggers. It's only needed with Apple Intelligence when "Build up over the session" is on:
 1. **Use Model** (cloud), with *Shortcut Input* as the prompt.
 2. **Stop and Output**, with the model's *Response*.
