@@ -268,7 +268,7 @@ function buildHTML(boot) {
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>VisionX</title>
 <style>
 :root{
@@ -284,6 +284,8 @@ function buildHTML(boot) {
   }
 }
 *{box-sizing:border-box}
+html,body{touch-action:pan-x pan-y;-webkit-text-size-adjust:100%}
+button,select,input,label,summary{touch-action:manipulation}
 html,body{margin:0;background:var(--paper);color:var(--ink)}
 body{
   font:16px/1.45 -apple-system,system-ui,sans-serif;
@@ -563,6 +565,14 @@ details.dbgCheck>summary{font-size:13px;cursor:pointer}
       <input id="tName" maxlength="40" placeholder="Crowd alert" autocapitalize="sentences">
       <label for="tCond">Condition</label>
       <textarea id="tCond" rows="2" placeholder="More than 3 different people have been seen"></textarea>
+      <div id="tWhenBox">
+        <label for="tWhen">When to check</label>
+        <select id="tWhen">
+          <option value="interval">Every few seconds</option>
+          <option value="photo">After each photo is analyzed</option>
+        </select>
+        <div class="hint" id="tWhenHint"></div>
+      </div>
       <div class="grid" id="tGrid">
         <div id="tEveryBox"><label for="tEvery">Check every (seconds)</label><input id="tEvery" type="number" min="5" step="1" inputmode="numeric"></div>
         <div><label for="tMode">Run the shortcut</label><select id="tMode">
@@ -696,6 +706,11 @@ details.dbgCheck>summary{font-size:13px;cursor:pointer}
 
   <canvas id="cv" hidden></canvas>
 <script>
+// The interface doesn't zoom: block pinch gestures (double-tap zoom is off via touch-action).
+["gesturestart", "gesturechange", "gestureend"].forEach(function (t) {
+  document.addEventListener(t, function (e) { e.preventDefault(); }, { passive: false });
+});
+document.addEventListener("touchmove", function (e) { if (e.touches && e.touches.length > 1) e.preventDefault(); }, { passive: false });
 window.addEventListener("error", function (e) {
   var b = document.getElementById("error");
   if (!b) return;
@@ -742,7 +757,7 @@ const PAGE_JS = String.raw`
     total: BOOT.modelsTotal || 0,
   };
   const FIELDS = ["instructions", "interval", "engine", "shortcut", "checkShortcut", "model", "detail", "maxSide", "facing"];
-  const TRIG_IDS = ["accumulate", "tAdd", "tName", "tCond", "tEvery", "tMode", "tShortcut", "tSend", "tMsg", "tSave", "tDelete", "tCancel"];
+  const TRIG_IDS = ["accumulate", "tAdd", "tName", "tCond", "tWhen", "tEvery", "tMode", "tShortcut", "tSend", "tMsg", "tSave", "tDelete", "tCancel"];
   const DEFAULTS = {
     instructions: "Count the different people you see and summarize them: appearance, what they are doing, and when they first appeared.",
     interval: 10,
@@ -1140,8 +1155,7 @@ const PAGE_JS = String.raw`
       : "On: each photo adds to one running summary for the whole session. Triggers check that summary on their own schedule.";
     $("summaryTitle").textContent = moment ? "Right now" : "Summary so far";
     $("checkBox").classList.toggle("hidden", !isApple() || moment);
-    $("tEveryBox").classList.toggle("hidden", moment);
-    $("tGrid").style.gridTemplateColumns = moment ? "1fr" : "";
+    updateTrigFormUI();
     $("trigHint").textContent = moment
       ? "With every photo, the model also answers each trigger's condition for that moment. When it's met, the trigger runs your shortcut and sends it the photo's summary or your own message."
       : "Every N seconds a trigger asks the model whether its condition is met by the summary so far. When it is, the trigger runs your shortcut and sends it the summary or your own message.";
@@ -1267,6 +1281,7 @@ const PAGE_JS = String.raw`
     renderAll(); tickClock();
 
     sess.stats.requests++;
+    let afterTask = null;
     const dbg = addDebug(sess, frame, "OpenAI");
     const t0 = Date.now();
     try {
@@ -1284,7 +1299,7 @@ const PAGE_JS = String.raw`
       if (result.state) sess.state = result.state;
       if (isMoment()) { sess.state = result.state || {}; sess.summary = result.summary || result.frame; sess.summaryAt = { idx: frame.idx, time: frame.time }; }
       else if (result.summary || result.frame) { sess.summary = result.summary || result.frame; sess.summaryAt = { idx: frame.idx, time: frame.time }; }
-      if (isMoment()) handleMomentVerdicts(sess, result.triggers);
+      afterTask = () => afterPhoto(sess, frame, result.triggers);
       if (sess === S) hideError();
     } catch (e) {
       frame.error = e.message;
@@ -1300,6 +1315,7 @@ const PAGE_JS = String.raw`
       sess.busyIdx = 0;
       if (sess === S) renderAll();
     }
+    if (afterTask) await afterTask();
   }
 
   async function shootApple(sess) {
@@ -1309,6 +1325,7 @@ const PAGE_JS = String.raw`
     sess.busyIdx = frame.idx;
     renderAll(); tickClock();
     sess.stats.requests++;
+    let afterTask = null;
     const dbg = addDebug(sess, frame, "Apple Intelligence");
     const t0 = Date.now();
     try {
@@ -1330,7 +1347,7 @@ const PAGE_JS = String.raw`
       if (result.state) sess.state = result.state;
       if (isMoment()) { sess.state = result.state || {}; sess.summary = result.summary || result.frame; sess.summaryAt = { idx: frame.idx, time: frame.time }; }
       else if (result.summary || result.frame) { sess.summary = result.summary || result.frame; sess.summaryAt = { idx: frame.idx, time: frame.time }; }
-      if (isMoment()) handleMomentVerdicts(sess, result.triggers);
+      afterTask = () => afterPhoto(sess, frame, result.triggers);
       if (sess === S) hideError();
     } catch (e) {
       frame.error = e.message;
@@ -1345,6 +1362,7 @@ const PAGE_JS = String.raw`
       sess.busyIdx = 0;
       if (sess === S) renderAll();
     }
+    if (afterTask) await afterTask();
   }
 
   // ── camera ──
@@ -1960,7 +1978,7 @@ const PAGE_JS = String.raw`
     const now = Date.now();
     sess.trigOrder.forEach((id) => {
       const st = sess.trig[id];
-      if (st.off || st.busy || st.done || now < st.nextAt) return;
+      if (st.off || st.busy || st.done || st.t.when === "photo" || now < st.nextAt) return;
       if (!sess.summary) {
         st.status = "waiting";
         st.nextAt = now + Math.min(st.t.every, 5) * 1000;
@@ -2052,6 +2070,7 @@ const PAGE_JS = String.raw`
 
   // Fresh mode: the photo's own answer says which conditions are met right now.
   function handleMomentVerdicts(sess, verdicts) {
+    const jobs = [];
     sess.trigOrder.forEach((id) => {
       const st = sess.trig[id];
       if (st.off || st.busy || st.done) return;
@@ -2062,11 +2081,34 @@ const PAGE_JS = String.raw`
         return;
       }
       st.busy = true;
-      applyVerdict(sess, st, v)
+      jobs.push(applyVerdict(sess, st, v)
         .catch((e) => { if (!e.cancelled) { st.status = "error"; st.error = e.message; } })
-        .finally(() => { st.busy = false; if (sess === S) renderTriggerStatus(); });
+        .finally(() => { st.busy = false; if (sess === S) renderTriggerStatus(); }));
     });
     if (sess === S) renderTriggerStatus();
+    return Promise.all(jobs);
+  }
+
+  // Build-up mode: triggers set to "after each photo" are checked now, against the new summary.
+  function runPhotoTriggers(sess) {
+    const jobs = [];
+    sess.trigOrder.forEach((id) => {
+      const st = sess.trig[id];
+      if (st.off || st.busy || st.done || st.t.when !== "photo" || !sess.summary) return;
+      jobs.push(runCheck(sess, st));
+    });
+    return Promise.all(jobs);
+  }
+
+  // Runs after a photo is analyzed; the capture loop waits for it before the next photo.
+  async function afterPhoto(sess, frame, verdicts) {
+    if (!sess.running) return;
+    const work = isMoment() ? handleMomentVerdicts(sess, verdicts) : runPhotoTriggers(sess);
+    const waiting = sess.trigOrder.some((id) => sess.trig[id].busy && (isMoment() || sess.trig[id].t.when === "photo"));
+    if (!waiting) return work;
+    sess.triggerWaitIdx = frame.idx;
+    tickClock();
+    try { await work; } finally { sess.triggerWaitIdx = 0; }
   }
 
   function normalizeVerdicts(raw) {
@@ -2112,7 +2154,7 @@ const PAGE_JS = String.raw`
       const next = Math.max(0, Math.ceil((st.nextAt - now) / 1000));
       let line;
       switch (st.status) {
-        case "idle": line = !sess.running ? "Not checked." : isMoment() ? "Checked with every photo. Waiting for the next one." : "First check in " + next + " s."; break;
+        case "idle": line = !sess.running ? "Not checked." : isMoment() ? "Checked with every photo. Waiting for the next one." : st.t.when === "photo" ? "Checked after each photo. Waiting for the next one." : "First check in " + next + " s."; break;
         case "waiting": line = "Waiting for the first summary."; break;
         case "checking": line = "Checking the condition…"; break;
         case "firing": line = "Condition met. Running \u201C" + st.t.shortcut + "\u201D…"; break;
@@ -2126,7 +2168,7 @@ const PAGE_JS = String.raw`
       if (line && !/[.!?…]$/.test(line)) line += ".";
       if (st.off) line = "Off." + (st.fired ? " Ran " + st.fired + (st.fired === 1 ? " time" : " times") + " before." : "");
       else if (st.done) line += " Done for this session.";
-      else if (sess.running && !isMoment() && !st.busy && st.status !== "idle" && st.status !== "waiting") line += " Next check in " + next + " s.";
+      else if (sess.running && !isMoment() && st.t.when !== "photo" && !st.busy && st.status !== "idle" && st.status !== "waiting") line += " Next check in " + next + " s.";
       r.sub.textContent = line;
       r.count.textContent = st.fired ? st.fired + "\u00D7" : "";
       r.count.classList.toggle("hidden", !st.fired);
@@ -2144,7 +2186,7 @@ const PAGE_JS = String.raw`
       const sw = makeSwitch(t.enabled !== false, "Trigger " + t.name + " on", (on) => setTriggerEnabled(t.id, on));
       const txt = el("div", "tText");
       const modeText = { rise: "each time it becomes true", once: "only the first time", every: "every check while true" }[t.mode || "rise"];
-      txt.append(el("b", null, t.name), el("span", "tsub", t.condition), el("span", "tsub", (isMoment() ? "Checked with every photo" : "Checks every " + t.every + " s") + "; runs \u201C" + t.shortcut + "\u201D " + modeText + ", sending " + (t.send === "custom" ? "a custom message" : "the summary") + "."));
+      txt.append(el("b", null, t.name), el("span", "tsub", t.condition), el("span", "tsub", triggerWhenText(t) + "; runs \u201C" + t.shortcut + "\u201D " + modeText + ", sending " + (t.send === "custom" ? "a custom message" : "the summary") + "."));
       const edit = el("button", "chip", "Edit");
       edit.type = "button";
       edit.disabled = S.running;
@@ -2156,12 +2198,32 @@ const PAGE_JS = String.raw`
     $("trigCount").textContent = triggers.length ? on + " of " + triggers.length + " on" : "";
   }
 
+  // Interval only applies to "every few seconds" checks in build-up mode.
+  function updateTrigFormUI() {
+    const moment = isMoment();
+    const perPhoto = moment || $("tWhen").value === "photo";
+    $("tWhenBox").classList.toggle("hidden", moment);
+    $("tEveryBox").classList.toggle("hidden", perPhoto);
+    $("tGrid").style.gridTemplateColumns = perPhoto ? "1fr" : "";
+    $("tWhenHint").textContent = $("tWhen").value === "photo"
+      ? "Checked right after every photo, against the updated summary. The next photo waits until this check and its shortcut have finished."
+      : "Checked on its own timer, independent of photos.";
+  }
+
+  function triggerWhenText(t) {
+    if (isMoment()) return "Checked with every photo (the next photo waits)";
+    if (t.when === "photo") return "Checked after each photo (the next photo waits)";
+    return "Checks every " + t.every + " s";
+  }
+
   function openTriggerForm(id) {
-    const t = triggers.find((x) => x.id === id) || { name: "", condition: "", every: 30, mode: "rise", shortcut: "", send: "summary", message: "" };
+    const t = triggers.find((x) => x.id === id) || { name: "", condition: "", every: 30, when: "interval", mode: "rise", shortcut: "", send: "summary", message: "" };
     editingTrigger = id || null;
     $("tName").value = t.name;
     $("tCond").value = t.condition;
     $("tEvery").value = String(t.every);
+    $("tWhen").value = t.when === "photo" ? "photo" : "interval";
+    updateTrigFormUI();
     $("tMode").value = t.mode || "rise";
     $("tShortcut").value = t.shortcut;
     $("tSend").value = t.send === "custom" ? "custom" : "summary";
@@ -2176,6 +2238,7 @@ const PAGE_JS = String.raw`
   function wireTriggers() {
     $("tAdd").addEventListener("click", () => openTriggerForm(null));
     $("tCancel").addEventListener("click", () => $("trigForm").classList.add("hidden"));
+    $("tWhen").addEventListener("change", updateTrigFormUI);
     $("tSend").addEventListener("change", () => {
       const custom = $("tSend").value === "custom";
       $("tMsgBox").classList.toggle("hidden", !custom);
@@ -2192,7 +2255,7 @@ const PAGE_JS = String.raw`
       const send = $("tSend").value;
       const message = $("tMsg").value.trim();
       if (send === "custom" && !message) { $("tHint").textContent = "Write the message to send, or choose to send the capture summary."; return $("tMsg").focus(); }
-      const data = { name: name, condition: condition, shortcut: shortcut, every: every, mode: $("tMode").value, send: send, message: message };
+      const data = { name: name, condition: condition, shortcut: shortcut, every: every, when: $("tWhen").value, mode: $("tMode").value, send: send, message: message };
       const existing = triggers.find((x) => x.id === editingTrigger);
       if (existing) Object.assign(existing, data);
       else triggers.push(Object.assign({ id: "t-" + Date.now().toString(36), enabled: true }, data));
@@ -2480,6 +2543,7 @@ const PAGE_JS = String.raw`
     runDueTriggers(S);
     if (S.trigOrder.length) renderTriggerStatus();
     if (S.busyIdx) setStatus((isApple() ? "Running the shortcut for photo #" : "Analyzing photo #") + S.busyIdx + "…");
+    else if (S.triggerWaitIdx) setStatus("Running triggers for photo #" + S.triggerWaitIdx + "…");
     else if (S.nextAt) setStatus("Next photo in " + Math.max(0, Math.ceil((S.nextAt - Date.now()) / 1000)) + " s");
   }
 

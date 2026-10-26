@@ -79,7 +79,12 @@ The **Build up over the session** switch controls whether photos add to one summ
 
 ### Triggers
 
-Each trigger has a name, a condition, the shortcut to run, and when to run it:
+Each trigger has a name, a condition, the shortcut to run, and **when to check**:
+
+- **Every few seconds**: on its own timer, independent of photos.
+- **After each photo is analyzed**: right after every photo, against the updated summary. The next photo isn't taken until the check and any shortcut it runs have finished. In fresh mode, every trigger works this way.
+
+And **when to run** the shortcut:
 
 - **Each time it becomes true** (default): runs once, then waits until the condition is false again.
 - **Only the first time**: runs at most once per session.
