@@ -17,6 +17,7 @@
   setup steps are in the app under "Analyze with".
 
   Settings (instructions, interval, model…) are edited inside the app UI.
+  VisionX checks GitHub for new versions when it opens (see CHECK_UPDATES).
   The API key is stored in the iOS Keychain. Change or remove it in the app
   with "Change API key" (RESET_API_KEY = true also re-asks at launch).
 */
@@ -26,6 +27,95 @@ const KEYCHAIN_KEY = "vision_session_openai_key";
 const DEFAULT_MODEL = "gpt-4.1-mini";
 const DEFAULT_SHORTCUT = "Vision Session AI";
 const STORE_FILE = "vision-session.json"; // presets + settings, in Scriptable's local Documents
+
+// ───────── Version and in-app updates ─────────
+// This build's version. When releasing, bump it and add a matching entry to releases.json.
+// Keep these two lines exactly in this form (single quotes): the updater reads them from downloads.
+const VERSION = '1.7.0';
+const APP_ID = 'visionx';   // unique per app, never changes
+const REPO_RAW = 'https://raw.githubusercontent.com/gadominas/VisionX/main/';
+const SCRIPT_FILE = 'VisionX.js';   // the script's file name in the repository
+const CHECK_UPDATES = true;   // offer new versions from GitHub (asks again 2 days after "Later")
+const UPDATE_SNOOZE_MS = 2 * 24 * 3600 * 1000;   // "Later" = 2 days
+const KC_UPDATE_SNOOZE = 'visionx-update-snooze';   // Keychain key, unique per app
+
+// Compares "1.10.0" and "1.9.2" as numbers: returns 1, 0 or -1.
+function cmpVer(a, b) {
+  const pa = String(a).split('.').map(n => parseInt(n, 10) || 0);
+  const pb = String(b).split('.').map(n => parseInt(n, 10) || 0);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const d = (pa[i] || 0) - (pb[i] || 0);
+    if (d) return d > 0 ? 1 : -1;
+  }
+  return 0;
+}
+
+// Never throws and never blocks: any failure just means no update is offered this time.
+async function checkForUpdate() {
+  if (!CHECK_UPDATES || updateSnoozed()) return null;
+  try {
+    const req = new Request(`${REPO_RAW}releases.json?t=${Date.now()}`);
+    req.timeoutInterval = 10;
+    const data = await req.loadJSON();
+    if (!data || !Array.isArray(data.releases)) return null;
+    const newer = data.releases
+      .filter(r => r && r.version && cmpVer(r.version, VERSION) > 0)
+      .sort((x, y) => cmpVer(y.version, x.version));
+    if (!newer.length) return null;
+    // The newest release's highlights first, topped up from older versions the user skipped.
+    const highlights = [];
+    newer.forEach(r => (r.highlights || []).forEach(h => {
+      if (highlights.length < 3 && h && h.title) highlights.push(h);
+    }));
+    return {
+      current: VERSION, latest: newer[0].version, title: newer[0].title || '',
+      skipped: newer.length, highlights, script: data.script || SCRIPT_FILE,
+    };
+  } catch (e) {
+    console.log('Update check skipped: ' + e);
+    return null;
+  }
+}
+
+function updateSnoozed() {
+  try {
+    return Keychain.contains(KC_UPDATE_SNOOZE) && Date.now() < +Keychain.get(KC_UPDATE_SNOOZE);
+  } catch (e) { return false; }
+}
+
+function snoozeUpdate() {
+  Keychain.set(KC_UPDATE_SNOOZE, String(Date.now() + UPDATE_SNOOZE_MS));
+}
+
+function clearUpdateSnooze() {
+  if (Keychain.contains(KC_UPDATE_SNOOZE)) Keychain.remove(KC_UPDATE_SNOOZE);
+}
+
+// Downloads the new script, checks it three ways, then writes it over this script's own file.
+async function applyUpdate(info) {
+  const req = new Request(`${REPO_RAW}${encodeURI((info && info.script) || SCRIPT_FILE)}?t=${Date.now()}`);
+  req.timeoutInterval = 30;
+  const code = await req.loadString();
+  const okStatus = req.response && req.response.statusCode === 200;
+  const m = code && code.match(/const VERSION = '([^']+)'/);
+  // 1. A real script for THIS app, not an error page or another project's file
+  if (!okStatus || !m || !code.includes(`const APP_ID = '${APP_ID}'`)) {
+    throw new Error("The download didn't look right. Try again later.");
+  }
+  // 2. Actually newer: GitHub's cache can serve the old file for a few minutes after a release
+  if (cmpVer(m[1], VERSION) <= 0) {
+    throw new Error('GitHub is still serving the old version. Try again in a few minutes.');
+  }
+  // 3. Write it where the running script lives (iCloud or on the phone)
+  const path = module.filename;
+  let fm = FileManager.local();
+  try {
+    const ic = FileManager.iCloud();
+    if (path.startsWith(ic.documentsDirectory())) fm = ic;
+  } catch (e) {}
+  fm.writeString(path, code);
+  return m[1];   // the version now installed
+}
 
 function storePath() {
   const fm = FileManager.local();
@@ -140,6 +230,13 @@ async function handleBridgeCall(wv, ctx, id) {
     else if (msg.type === "runShortcut") result = await runShortcutText(msg.payload.shortcut, msg.payload.text);
     else if (msg.type === "save") { writeStore(msg.payload); result = true; }
     else if (msg.type === "copy") { Pasteboard.copy(String(msg.payload.text || "")); result = true; }
+    else if (msg.type === "updateLater") { snoozeUpdate(); ctx.update = null; result = true; }
+    else if (msg.type === "updateNow") {
+      if (!ctx.update) throw new Error("No update is waiting. Close and reopen VisionX to check again.");
+      result = await applyUpdate(ctx.update);
+      ctx.update = null;
+      clearUpdateSnooze();
+    }
     else throw new Error("unknown request type " + msg.type);
     reply = { ok: true, result };
   } catch (e) {
@@ -247,6 +344,7 @@ async function main() {
     apiKey,
     defaultModel: DEFAULT_MODEL,
     defaultShortcut: DEFAULT_SHORTCUT,
+    version: VERSION,
     models: m.models,
     modelsError: m.error,
     modelsStatus: m.status,
@@ -257,7 +355,15 @@ async function main() {
   attachBridge(wv, ctx);
   // An https base URL gives the page a secure origin, which the camera API requires.
   await wv.loadHTML(buildHTML(boot), "https://localhost/");
-  await wv.present(true);
+  const shown = wv.present(true);
+  // Once per run, after the first screen is up, so it never slows the start.
+  Timer.schedule(1500, false, () => {
+    checkForUpdate().then((u) => {
+      ctx.update = u;
+      if (u) wv.evaluateJavaScript("window.__showUpdate && window.__showUpdate(" + JSON.stringify(u) + "); 'ok'").catch(() => {});
+    });
+  });
+  await shown;
   await saveOnClose(wv);
 }
 
@@ -469,6 +575,22 @@ details.dbg{border:1px solid var(--rule);border-radius:10px;background:var(--sur
 .dbgPhoto{display:block;max-width:100%;max-height:40vh;border-radius:6px;margin-top:4px}
 details.dbgCheck{margin-top:10px;border-top:1px solid var(--rule);padding-top:6px}
 details.dbgCheck>summary{font-size:13px;cursor:pointer}
+#upd{position:fixed;inset:0;z-index:30;background:rgba(0,0,0,.55);display:flex;align-items:flex-end;justify-content:center}
+.updp{width:100%;max-width:720px;max-height:92vh;overflow:auto;background:var(--surface);color:var(--ink);border-radius:22px 22px 0 0;padding:20px 18px calc(16px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:8px}
+.updp:focus{outline:none}
+.updtag{align-self:flex-start;background:var(--done);color:var(--paper);font-size:12px;font-weight:800;padding:4px 10px;border-radius:999px}
+.updt{margin:6px 0 0;font:700 22px/1.2 ui-rounded,-apple-system,system-ui,sans-serif}
+.upds{color:var(--graphite);font-size:14px}
+.updl{display:flex;flex-direction:column;gap:10px;margin:8px 0 6px}
+.updi{display:flex;gap:12px;align-items:flex-start;background:var(--field);border-radius:14px;padding:12px}
+.updic{font-size:24px;line-height:1.1;flex:none}
+.updi b{display:block;font-size:15px}
+.updi span{display:block;color:var(--graphite);font-size:13px;line-height:1.35;margin-top:2px}
+.updmsg{font-size:14px}
+.updmsg:empty{display:none}
+.updgo{flex:none;width:100%}
+.updlater{height:46px;border:0;border-radius:23px;background:var(--field);color:var(--ink);font:600 15px/1 -apple-system,system-ui,sans-serif;cursor:pointer}
+.ver{text-align:center;color:var(--graphite);font-size:12px;margin:24px 0 0}
 .modal{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:flex-end;justify-content:center;z-index:10}
 .sheet{
   background:var(--surface);width:100%;max-width:720px;max-height:88vh;overflow:auto;
@@ -662,6 +784,8 @@ details.dbgCheck>summary{font-size:13px;cursor:pointer}
     <div id="debugList" class="dbgList"></div>
   </details>
 
+  <p class="ver" id="verLine"></p>
+
   <div id="editor" class="editor hidden" role="dialog" aria-modal="true" aria-labelledby="edTitle">
     <div class="edHead">
       <button type="button" class="chip" id="edCancel">Cancel</button>
@@ -783,6 +907,7 @@ const PAGE_JS = String.raw`
   let flashTimer = null;
   let editingTrigger = null;
   let shortcutChain = Promise.resolve();
+  let queuedUpdate = null;
   let refining = false, beforeRefine = null;
   let zoomState = { camera: 1, digital: 1 }; // camera = lens zoom applied by iOS, digital = crop on top
   let zoomTimer = null, aimTimer = null;
@@ -993,7 +1118,8 @@ const PAGE_JS = String.raw`
     });
   }
   $("toggle").addEventListener("click", () => (S.running ? endSession() : startSession()));
-  $("mClose").addEventListener("click", () => $("modal").classList.add("hidden"));
+  $("mClose").addEventListener("click", () => { $("modal").classList.add("hidden"); showQueuedUpdate(); });
+  $("verLine").textContent = "VisionX v" + BOOT.version;
 
   // ── settings ──
   // The store file read by Scriptable wins; localStorage is a fallback copy.
@@ -1747,6 +1873,71 @@ const PAGE_JS = String.raw`
       }
     });
     renderDebug();
+  }
+
+  // ── in-app update sheet ──
+  // Scriptable checks GitHub and calls window.__showUpdate(info); the user's choice goes
+  // back through the bridge ("updateNow" / "updateLater"). Release text comes from the
+  // internet, so it is always inserted as escaped text, never as raw HTML.
+  window.__showUpdate = function (u) {
+    if (!u || $("upd")) return;
+    if (S.running) { queuedUpdate = u; return; } // don't interrupt a capture; offer it after
+    showUpdateSheet(u);
+  };
+  function showQueuedUpdate() {
+    if (!queuedUpdate || S.running) return;
+    const u = queuedUpdate;
+    queuedUpdate = null;
+    showUpdateSheet(u);
+  }
+  function showUpdateSheet(u) {
+    const ov = document.createElement("div");
+    ov.id = "upd";
+    const cards = (u.highlights || []).map(function (h) {
+      return '<div class="updi"><span class="updic">' + escHTML(h.icon || "\u2728") + "</span><div><b>" +
+        escHTML(h.title) + "</b><span>" + escHTML(h.text || "") + "</span></div></div>";
+    }).join("");
+    const more = u.skipped > 1 ? " (and " + (u.skipped - 1) + " more update" + (u.skipped > 2 ? "s" : "") + ")" : "";
+    ov.innerHTML = '<div class="updp" role="dialog" aria-modal="true" aria-label="Update available" tabindex="-1">' +
+      '<div class="updtag">New version ' + escHTML(u.latest) + "</div>" +
+      '<h2 class="updt">' + escHTML(u.title || "An update is ready") + "</h2>" +
+      '<div class="upds">You have ' + escHTML(u.current) + more + ". Here\u2019s what you get:</div>" +
+      '<div class="updl">' + cards + "</div>" +
+      '<div class="updmsg" aria-live="polite"></div>' +
+      '<button type="button" class="btn updgo">Update now</button>' +
+      '<button type="button" class="updlater">Later, remind me in 2 days</button></div>';
+    document.body.appendChild(ov);
+    ov.addEventListener("click", function (e) { if (e.target === ov) updLater(); }); // outside = Later
+    ov.querySelector(".updlater").addEventListener("click", updLater);
+    ov.querySelector(".updgo").addEventListener("click", function (e) { updNow(e.currentTarget); });
+    ov.querySelector(".updp").focus();
+  }
+  function updLater() {
+    const ov = $("upd");
+    if (!ov) return;
+    ov.remove();
+    nativeCall("updateLater", null, 10000).catch(function () {});
+  }
+  function updNow(btn) {
+    const ov = $("upd");
+    if (btn.dataset.act === "close") { ov.remove(); return; }
+    const msg = ov.querySelector(".updmsg"), later = ov.querySelector(".updlater");
+    btn.disabled = true;
+    btn.textContent = "Updating\u2026";
+    later.hidden = true;
+    msg.textContent = "";
+    nativeCall("updateNow", null, 90000).then(function (version) {
+      ov.querySelector(".updtag").textContent = "Updated to " + version;
+      msg.innerHTML = "<b>\u2713 Done.</b> Close VisionX and open it again to start using the new version.";
+      btn.disabled = false;
+      btn.textContent = "Got it";
+      btn.dataset.act = "close";
+    }).catch(function (e) {
+      msg.textContent = (e && e.message) || "Update failed";
+      btn.disabled = false;
+      btn.textContent = "Try again";
+      later.hidden = false;
+    });
   }
 
   // ── instructions editor and AI refine ──

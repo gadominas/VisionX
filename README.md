@@ -123,6 +123,12 @@ Run it once from Shortcuts to grant camera access. With Apple Intelligence, each
 
 Both shortcut names can be changed in the app.
 
+## Updates and what's new
+
+VisionX checks for a new version each time it opens. When one is out, a sheet shows its three best features, with **Update now** and **Later**. Update now installs the new version over the current one; close and reopen VisionX to start it. Later, or tapping outside the sheet, hides the offer for two days. Your presets, triggers and settings are kept.
+
+The full history is in [CHANGELOG.md](CHANGELOG.md). Versions before 1.7.0 can't update themselves, so run *VisionX Installer* once more to get 1.7.0. To turn update checks off, set `const CHECK_UPDATES = false;` near the top of `VisionX.js`.
+
 ## Privacy
 
 - Photos are kept in memory only: the last three on screen and the last ten in the debug log. They are never written to disk or Photos, and they're cleared when a new session starts.
