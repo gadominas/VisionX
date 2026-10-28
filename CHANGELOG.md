@@ -2,6 +2,25 @@
 
 All notable changes to VisionX. Generated from `releases.json`; edit that file, not this one.
 
+## 1.11.0 (2026-10-28): Pause, follow along, see it drawn
+
+- ⏯️ **Start, pause, stop**: Control the session from a header that stays on top, with a countdown.
+- 📊 **Visual AI summaries**: Summaries render Markdown: tables, bar charts and gauges, in a fixed-width font.
+- 🎯 **Triggers tab**: Triggers have their own tab, and every photo's AI summary sits right under it.
+
+**Changes**
+
+- Sticky header like Strava Daily Digest: Start, Pause/Resume, Stop, Settings, tabs, and a status line with the countdown and analyzing status
+- Pause stops new photos and freezes the clock and trigger timers; Resume takes a photo at once; paused time is shown separately in the report
+- Triggers moved to their own tab
+- Live: the AI summary of the latest photo right under the live and analyzed photos
+- Summaries, photo notes and reports render Markdown safely (no raw HTML except numeric <meter>/<progress>), in a fixed-width font
+- The model is told it may use Markdown, bars and gauges when the instructions ask for them
+
+**Fixes**
+
+- Code blocks inside a model's reply were stripped while reading it
+
 ## 1.10.0 (2026-10-28): Watch it live, keep every session
 
 - 🔴 **Live session tab**: See the live camera, the photo being analyzed and a countdown to the next one.

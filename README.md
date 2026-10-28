@@ -9,7 +9,7 @@
   <img src="docs/screenshots/editor.png" width="200" alt="The expanded instructions editor with an AI-refined suggestion">
 </p>
 <p align="center">
-  <img src="docs/screenshots/live.png" width="260" alt="Live tab: live camera, the photo being analyzed, countdown to the next photo, zoom and End session">
+  <img src="docs/screenshots/live.png" width="260" alt="Live tab under the sticky header: live camera, the analyzed photo and its AI summary with a Markdown table and bars">
   <img src="docs/screenshots/report.png" width="260" alt="A saved session's report: what happened and the session stats">
 </p>
 <p align="center"><sub>A known plate is read and the "Open Gate" shortcut runs · counting vehicles and plates over a session · setting up triggers · refining instructions with AI.<br>Screenshots of the app's real interface, rendered with a drawn test scene in place of the camera.</sub></p>
@@ -34,7 +34,9 @@
 - **Zoom while capturing.** Slide from 1× to 5× at any time, even mid-session; the next photo uses it. VisionX uses the camera's own zoom when iOS offers it and crops for anything beyond that.
 - **Your instructions.** It does whatever you describe, such as "Count the different people and summarize them" or "Read the license plate of any car at the gate". Save instructions you like as presets.
 - **Full-screen editor with AI refine.** Expand the instructions into a full-screen editor. **Refine with AI** rewrites them so the model knows exactly what to look for, count and ignore. Pick Clearer, More specific or Shorter, or say what should change, then use the suggestion or keep your own.
-- **Live tab.** Starting a session opens Live: the live camera, the photo being analyzed right now, a countdown to the next photo, zoom, and End session. Below it, the newest photo sits next to the running summary.
+- **Sticky header.** Start, Pause/Resume and Stop, Settings, the tabs (Setup, Triggers, Live, Sessions) and a status line with the countdown to the next photo or what's being analyzed stay at the top on every tab.
+- **Live tab.** Starting a session opens Live: the live camera, the photo being analyzed right now, and right under them the AI summary of that photo. Then zoom, stats, and the running summary next to the newest photo.
+- **Markdown summaries.** Summaries are shown in a fixed-width font and render Markdown from the model: headings, lists, tables, code blocks (for Unicode bar charts) and gauges (`<meter>`, `<progress>`). Ask for it in your instructions, for example "show a table of counts and a bar per category".
 - **Saved sessions.** Ending a session saves it on this iPhone with its summary, stats, trigger results, last photos and debug log, and opens its report in the Sessions tab. The last 3 are kept by default, up to 10 (Settings › Capture).
 - **Two summary modes.** Each photo can build on one running summary for the whole session, or be judged fresh on its own (see [Modes](#modes)).
 - **Triggers.** A trigger has a plain-language condition, such as "A car with plate KXA 482 is at the gate", and a shortcut to run. When the model says the condition is met, the shortcut runs and receives the capture summary or your own message. Live rows show which triggers are waiting, checking or have fired, and each one can be switched on or off at any time.

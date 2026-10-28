@@ -28,7 +28,7 @@ const STORE_FILE = "vision-session.json"; // presets + settings, in Scriptable's
 // ───────── Version and in-app updates ─────────
 // This build's version. When releasing, bump it and add a matching entry to releases.json.
 // Keep these two lines exactly in this form (single quotes): the updater reads them from downloads.
-const VERSION = '1.10.0';
+const VERSION = '1.11.0';
 const APP_ID = 'visionx';   // unique per app, never changes
 const REPO_RAW = 'https://raw.githubusercontent.com/gadominas/VisionX/main/';
 const SCRIPT_FILE = 'VisionX.js';   // the script's file name in the repository
@@ -989,6 +989,7 @@ body.d-tiny .older article.open img{order:3;width:100%}
 .tabs button[aria-selected=true]{background:var(--surface);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.14)}
 .tabs button:focus-visible{outline:3px solid var(--done);outline-offset:1px}
 .tabs .recdot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--rec);margin-right:6px;vertical-align:1px;animation:pulse 1.4s ease-in-out infinite}
+.tabs .recdot.held{background:var(--amber,#B45309);animation:none}
 .tabs .cnt{font-weight:500;color:var(--graphite);margin-left:4px}
 .startBar .btn{width:100%;margin:4px 0 14px}
 /* Live */
@@ -1041,6 +1042,56 @@ body.d-tiny .older article.open img{order:3;width:100%}
 .rphotos figcaption{font-size:12px;color:var(--graphite);margin-top:4px}
 .rphotos .note{font-size:13px;margin-top:2px}
 .repTop{display:flex;justify-content:space-between;align-items:center;gap:8px}
+/* Sticky header (same pattern as Strava Daily Digest) */
+.hdr{position:sticky;top:0;z-index:15;margin:calc(-1 * (env(safe-area-inset-top,0px) + 14px)) -16px 14px;padding:calc(env(safe-area-inset-top,0px) + 8px) 16px 0;background:var(--paper);border-bottom:1px solid var(--rule);transition:box-shadow .2s}
+.hdr.stuck{box-shadow:0 8px 18px -12px rgba(0,0,0,.55)}
+.brand{display:flex;align-items:center;gap:8px;min-height:44px}
+.brand-name{font:800 calc(22px * var(--ts))/1 var(--display);letter-spacing:-.01em;margin-right:auto}
+.hbtn{width:40px;height:40px;border-radius:20px;display:grid;place-items:center;background:var(--sheet);border:1px solid var(--rule);color:var(--ink);padding:0;cursor:pointer;flex:none}
+.hbtn svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;display:block}
+.hbtn.solid svg{fill:currentColor;stroke:none}
+.hbtn.go{background:var(--rec);border-color:var(--rec);color:#fff}
+.hbtn.resume{background:var(--done);border-color:var(--done);color:var(--paper)}
+.hbtn:disabled{opacity:.5}
+.hbtn:focus-visible{outline:3px solid var(--done);outline-offset:2px}
+.hdr .tabs{margin:6px 0 0;border-radius:999px;padding:3px;gap:2px}
+.hdr .tabs button{border-radius:999px;height:34px;font-size:calc(13px * var(--ts,1))}
+.hstat{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:32px;padding:4px 2px}
+.hstat .status{min-width:0}
+.hstat #status{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.paused .dot{background:var(--amber,#B45309)!important;animation:none!important}
+.hdr .cdBar{height:3px;border-radius:0;margin:0 -16px;background:transparent}
+.hdr .cdBar span{border-radius:0 2px 2px 0}
+/* AI summary of the photo, right under the live and analyzed photos */
+.frameSum{background:var(--surface);border:1px solid var(--rule);border-radius:14px;padding:10px 12px;margin:10px 0 12px}
+.fsHead{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:6px}
+.fsHead b{font-size:calc(13px * var(--ts,1))}
+.fsMeta{color:var(--graphite);font-size:12px;text-align:right}
+/* Markdown from the model, in a fixed-width font */
+.md{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:calc(13px * var(--ts,1));line-height:1.5;overflow-wrap:anywhere;white-space:normal}
+.md p{margin:0 0 .6em}
+.md>:last-child{margin-bottom:0}
+.md .mdh{font-weight:700;margin:.5em 0 .3em}
+.md .mdh:first-child{margin-top:0}
+.md .mdh1{font-size:1.25em}.md .mdh2{font-size:1.12em}.md .mdh3{font-size:1.04em}
+.md ul,.md ol{margin:.2em 0 .6em;padding-left:1.5em}
+.md li{margin:.1em 0}
+.md code{background:var(--field);padding:0 .25em;border-radius:4px;font:inherit}
+.md pre.mdpre{background:var(--field);padding:8px 10px;border-radius:8px;overflow-x:auto;white-space:pre;margin:.3em 0 .6em;line-height:1.25;font:inherit}
+.md pre.mdpre code{background:none;padding:0}
+.md .mdtable{overflow-x:auto;margin:.3em 0 .6em}
+.md table{border-collapse:collapse;font:inherit}
+.md th,.md td{border:1px solid var(--rule);padding:3px 8px;text-align:left;white-space:nowrap}
+.md th{background:var(--field);font-weight:700}
+.md blockquote{margin:.3em 0 .6em;padding:.1em .8em;border-left:3px solid var(--done);color:var(--graphite)}
+.md hr{border:0;border-top:1px solid var(--rule);margin:.6em 0}
+.md .mdlink{text-decoration:underline}
+.md .mdgauge{width:100%;max-width:240px;height:12px;vertical-align:middle;accent-color:var(--done)}
+.md .muted{color:var(--graphite)}
+.md .err{color:var(--rec)}
+.heroSummary #summary.md{margin:0}
+.report .bigsum.md{font-size:calc(14px * var(--ts,1))}
+.panelTitle{display:flex;align-items:baseline;gap:6px;margin:0 0 4px;font-size:calc(17px * var(--ts,1))}
 /* Layers: modal 10, editor 20, update 30, Settings 50, AI settings 60 (it opens from Settings), toasts 70 */
 #cfgsheet{position:fixed;inset:0;z-index:50;background:var(--paper);color:var(--ink);transform:translateY(102%);visibility:hidden;transition:transform .28s ease,visibility 0s linear .28s;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;text-align:left}
 #cfgsheet.open{transform:none;visibility:visible;transition:transform .28s ease}
@@ -1100,19 +1151,26 @@ body.d-tiny .older article.open img{order:3;width:100%}
 </style>
 </head>
 <body class="d-${look.density}">
-  <div class="top">
-    <h1>VisionX</h1>
-    <div class="topR">
-      <div class="status" id="statusBox"><span class="dot"></span><span id="status">Ready</span></div>
-      <button type="button" class="icon" id="cfgOpen" aria-label="Settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></svg></button>
+  <header class="hdr" id="hdr">
+    <div class="brand">
+      <span class="brand-name">VisionX</span>
+      <button type="button" class="hbtn solid go" id="hStart" aria-label="Start session"></button>
+      <button type="button" class="hbtn solid hidden" id="hPause" aria-label="Pause session"></button>
+      <button type="button" class="hbtn solid hidden" id="hStop" aria-label="Stop session"></button>
+      <button type="button" class="hbtn" id="cfgOpen" aria-label="Settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></svg></button>
     </div>
-  </div>
-
-  <nav class="tabs" role="tablist" aria-label="VisionX">
-    <button type="button" role="tab" id="tab-setup" aria-controls="view-setup" aria-selected="true">Setup</button>
-    <button type="button" role="tab" id="tab-live" aria-controls="view-live" aria-selected="false" tabindex="-1">Live</button>
-    <button type="button" role="tab" id="tab-sessions" aria-controls="view-sessions" aria-selected="false" tabindex="-1">Sessions</button>
-  </nav>
+    <nav class="tabs" role="tablist" aria-label="VisionX">
+      <button type="button" role="tab" id="tab-setup" aria-controls="view-setup" aria-selected="true">Setup</button>
+      <button type="button" role="tab" id="tab-triggers" aria-controls="view-triggers" aria-selected="false" tabindex="-1">Triggers</button>
+      <button type="button" role="tab" id="tab-live" aria-controls="view-live" aria-selected="false" tabindex="-1">Live</button>
+      <button type="button" role="tab" id="tab-sessions" aria-controls="view-sessions" aria-selected="false" tabindex="-1">Sessions</button>
+    </nav>
+    <div class="hstat">
+      <div class="status" id="statusBox" aria-live="polite"><span class="dot"></span><span id="status">Ready</span></div>
+      <span class="cdSub num" id="cdSub"></span>
+    </div>
+    <div class="cdBar" id="cdBar" aria-hidden="true"><span id="cdFill"></span></div>
+  </header>
 
   <div id="error" class="error hidden"></div>
 
@@ -1175,8 +1233,13 @@ body.d-tiny .older article.open img{order:3;width:100%}
     <div id="aiStatus" class="hint" aria-live="polite"></div>
   </details>
 
-  <details class="settings" id="triggersBox">
-    <summary>Triggers <span id="trigCount" class="trigCount"></span></summary>
+
+  <div class="startBar"><button id="toggle" class="btn">Start session</button></div>
+  </div>
+
+  <div id="view-triggers" class="view hidden" role="tabpanel" aria-labelledby="tab-triggers">
+  <section class="settings" id="triggersBox">
+    <h2 class="panelTitle">Triggers <span id="trigCount" class="trigCount"></span></h2>
     <div class="hint" id="trigHint"></div>
     <div id="trigList" class="trigList"></div>
     <div class="presetBar"><button type="button" class="chip" id="tAdd">Add trigger</button></div>
@@ -1234,9 +1297,7 @@ body.d-tiny .older article.open img{order:3;width:100%}
         </ol>
       </details>
     </div>
-  </details>
-
-  <div class="startBar"><button id="toggle" class="btn">Start session</button></div>
+  </section>
   </div>
 
   <div id="view-live" class="view hidden" role="tabpanel" aria-labelledby="tab-live">
@@ -1256,10 +1317,10 @@ body.d-tiny .older article.open img{order:3;width:100%}
       <figcaption id="nowCap">Photo being analyzed</figcaption>
     </figure>
   </div>
-  <div class="countdown">
-    <div class="cdTop"><span class="cdText num" id="cdText">Starting…</span><span class="cdSub num" id="cdSub"></span></div>
-    <div class="cdBar" id="cdBar" aria-hidden="true"><span id="cdFill"></span></div>
-  </div>
+  <section class="frameSum" id="frameSum" aria-live="polite">
+    <div class="fsHead"><b>AI summary of the photo</b><span class="fsMeta num" id="fsMeta"></span></div>
+    <div class="md" id="fsBody"></div>
+  </section>
   <div class="zoomRow" id="zoomRow">
     <label for="zoom">Zoom</label>
     <input id="zoom" type="range" min="1" max="5" step="0.1" value="1" aria-describedby="zoomHint">
@@ -1267,7 +1328,6 @@ body.d-tiny .older article.open img{order:3;width:100%}
     <button type="button" class="chip" id="zoomReset">1×</button>
   </div>
   <div class="zoomHint" id="zoomHint">Change it any time, even while capturing. The next photo uses it.</div>
-  <button type="button" class="btn stop endBtn" id="endBtn">End session</button>
 
   <div class="strip num">
     <div><b id="sElapsed">0:00</b><span>Elapsed</span></div>
@@ -1284,7 +1344,7 @@ body.d-tiny .older article.open img{order:3;width:100%}
       <div class="scroll">
         <h2 id="summaryTitle">Summary so far</h2>
         <span id="summaryBy" class="badge-ai hidden"></span>
-        <p id="summary" class="muted" aria-live="polite"></p>
+        <div id="summary" class="md muted" aria-live="polite"></div>
         <div id="summaryMeta" class="meta num"></div>
       </div>
     </div>
@@ -1426,6 +1486,10 @@ const PAGE_JS = String.raw`
   let editingTrigger = null;
   let shortcutChain = Promise.resolve();
   let queuedUpdate = null;
+  const BT = String.fromCharCode(96);
+  const ICON_PLAY = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l11-6.5z"/></svg>';
+  const ICON_PAUSE = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5h3v14H8zM13 5h3v14h-3z"/></svg>';
+  const ICON_STOP = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>';
   let refining = false, beforeRefine = null;
   let zoomState = { camera: 1, digital: 1 }; // camera = lens zoom applied by iOS, digital = crop on top
   let zoomTimer = null, aimTimer = null;
@@ -1777,6 +1841,7 @@ const PAGE_JS = String.raw`
   applyLook();
   $("toggle").addEventListener("click", () => (S.running ? endSession() : startSession()));
   wireTabs();
+  wireControls();
   $("mClose").addEventListener("click", () => { $("modal").classList.add("hidden"); showQueuedUpdate(); });
   $("verLine").textContent = "VisionX v" + BOOT.version;
 
@@ -2028,6 +2093,8 @@ const PAGE_JS = String.raw`
     if (!sess.running) return;
     sess.running = false;
     sess.stats.end = Date.now();
+    if (sess.paused) { sess.stats.paused = (sess.stats.paused || 0) + (sess.stats.end - sess.pausedAt); sess.paused = false; }
+    if (sess.resumeWake) { const r = sess.resumeWake; sess.resumeWake = null; r(); }
     if (sess.ctrl) sess.ctrl.abort();
     cancelCalls();
     wake(sess);
@@ -2045,6 +2112,7 @@ const PAGE_JS = String.raw`
 
   async function loop(sess) {
     while (sess.running) {
+      if (sess.paused) { await new Promise((r) => { sess.resumeWake = r; }); if (!sess.running) break; }
       const t0 = Date.now();
       await shoot(sess);
       if (sess.fatal) { showError(sess.fatal); await endSession(); break; }
@@ -2285,6 +2353,7 @@ const PAGE_JS = String.raw`
       "- Keep counts and totals consistent with everything seen so far, not only this frame.",
       "- Keep the state compact (well under 2000 characters); merge or drop low-value detail when needed.",
       "- If the frame is dark, blurry or empty, say so and keep the state unchanged.",
+      "- " + mdHint(labelled),
       "",
     ].concat(labelled ? [
       "Respond in exactly this format and nothing else:",
@@ -2309,6 +2378,7 @@ const PAGE_JS = String.raw`
       cfg.instructions,
       "",
       "If the photo is dark, blurry or empty, say so.",
+      mdHint(labelled),
     ];
     if (active.length) {
       lines.push("", "CONDITIONS. For each one, decide from this photo alone whether it is met right now:");
@@ -2517,11 +2587,193 @@ const PAGE_JS = String.raw`
     renderDebug();
   }
 
-  // ── tabs: Setup, Live, Sessions ──
+  // ── Markdown for AI text (frame and summary) ──
+  // Safe by design: everything is escaped; the only HTML kept is <meter>/<progress> with numeric attributes.
+  function mdInline(src) {
+    const keep = [];
+    const stash = (html) => { keep.push(html); return "\u0000" + (keep.length - 1) + "\u0000"; };
+    let t = String(src == null ? "" : src).replace(/\u0000/g, "");
+    t = t.replace(/<(meter|progress)\b([^>]*)>(?:\s*<\/(?:meter|progress)>)?/gi, (m, tag, attrs) => {
+      tag = tag.toLowerCase();
+      const allowed = tag === "meter" ? ["value", "min", "max", "low", "high", "optimum"] : ["value", "max"];
+      let out = "<" + tag + ' class="mdgauge"', ok = false;
+      attrs.replace(/(\w+)\s*=\s*["']?(-?\d*\.?\d+)["']?/g, (a, k, v) => {
+        k = k.toLowerCase();
+        if (allowed.indexOf(k) !== -1 && isFinite(parseFloat(v))) { out += " " + k + '="' + parseFloat(v) + '"'; if (k === "value") ok = true; }
+        return a;
+      });
+      return ok ? stash(out + "></" + tag + ">") : m;
+    });
+    t = t.replace(new RegExp(BT + "([^" + BT + "]+)" + BT, "g"), (m, c) => stash("<code>" + escHTML(c) + "</code>"));
+    t = escHTML(t);
+    t = t.replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1");
+    t = t.replace(/\[([^\]]+)\]\([^)]*\)/g, '<span class="mdlink">$1</span>');
+    t = t.replace(/\*\*([^*]+)\*\*|__([^_]+)__/g, (m, a, b) => "<strong>" + (a || b) + "</strong>");
+    t = t.replace(/(^|[^*\w])\*([^*\s][^*]*?)\*(?![\w*])/g, "$1<em>$2</em>");
+    t = t.replace(/(^|[^\w])_([^_\s][^_]*?)_(?!\w)/g, "$1<em>$2</em>");
+    t = t.replace(/~~([^~]+)~~/g, "<del>$1</del>");
+    return t.replace(/\u0000(\d+)\u0000/g, (m, n) => keep[+n] || "");
+  }
+  function md(src) {
+    const lines = String(src == null ? "" : src).replace(/\r\n?/g, "\n").split("\n");
+    const fenceRe = new RegExp("^\\s*(" + BT + "{3,}|~{3,})");
+    const listRe = /^(\s*)([-*+]|\d+[.)])\s+(.*)$/;
+    const isSep = (l) => /^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$/.test(l) && l.indexOf('|') !== -1;
+    const cells = (l) => { let c = l.trim(); if (c.charAt(0) === "|") c = c.slice(1); if (c.slice(-1) === "|") c = c.slice(0, -1); return c.split("|").map((x) => x.trim()); };
+    let html = "", i = 0, para = [];
+    const flush = () => { if (para.length) { html += "<p>" + para.map(mdInline).join("<br>") + "</p>"; para = []; } };
+    while (i < lines.length) {
+      const line = lines[i];
+      let m = fenceRe.exec(line);
+      if (m) {
+        flush();
+        const fence = m[1].charAt(0).repeat(3), body = [];
+        i++;
+        while (i < lines.length && lines[i].trim().indexOf(fence) !== 0) { body.push(lines[i]); i++; }
+        i++;
+        html += '<pre class="mdpre"><code>' + escHTML(body.join("\n")) + "</code></pre>";
+        continue;
+      }
+      if (!line.trim()) { flush(); i++; continue; }
+      if ((m = /^\s*(#{1,6})\s+(.*?)\s*#*\s*$/.exec(line))) { flush(); html += '<div class="mdh mdh' + m[1].length + '">' + mdInline(m[2]) + "</div>"; i++; continue; }
+      if (/^\s*([-*_])(\s*\1){2,}\s*$/.test(line)) { flush(); html += "<hr>"; i++; continue; }
+      if (line.indexOf("|") !== -1 && i + 1 < lines.length && isSep(lines[i + 1])) {
+        flush();
+        const head = cells(line);
+        const al = cells(lines[i + 1]).map((c) => (/^:-+:$/.test(c) ? "center" : /-+:$/.test(c) ? "right" : ""));
+        const td = (tag, c, k) => "<" + tag + (al[k] ? ' style="text-align:' + al[k] + '"' : "") + ">" + mdInline(c) + "</" + tag + ">";
+        let t = '<div class="mdtable"><table><thead><tr>' + head.map((c, k) => td("th", c, k)).join("") + "</tr></thead><tbody>";
+        i += 2;
+        while (i < lines.length && lines[i].trim() && lines[i].indexOf("|") !== -1) {
+          const r = cells(lines[i]);
+          t += "<tr>" + head.map((x, k) => td("td", r[k] || "", k)).join("") + "</tr>";
+          i++;
+        }
+        html += t + "</tbody></table></div>";
+        continue;
+      }
+      if (/^\s*>/.test(line)) {
+        flush();
+        const q = [];
+        while (i < lines.length && /^\s*>/.test(lines[i])) { q.push(lines[i].replace(/^\s*>\s?/, "")); i++; }
+        html += "<blockquote>" + md(q.join("\n")) + "</blockquote>";
+        continue;
+      }
+      if (listRe.test(line)) {
+        flush();
+        const stack = [];
+        let out = "";
+        while (i < lines.length) {
+          const lm = listRe.exec(lines[i]);
+          if (!lm) {
+            if (stack.length && /^\s{2,}\S/.test(lines[i])) { out += "<br>" + mdInline(lines[i].trim()); i++; continue; }
+            break;
+          }
+          const indent = lm[1].replace(/\t/g, "    ").length, type = /\d/.test(lm[2]) ? "ol" : "ul";
+          while (stack.length > 1 && indent < stack[stack.length - 1].indent) out += "</li></" + stack.pop().type + ">";
+          const top = stack[stack.length - 1];
+          if (!top || indent > top.indent) { out += "<" + type + ">"; stack.push({ type: type, indent: indent }); }
+          else out += "</li>";
+          let item = lm[3];
+          const task = /^\[([ xX])\]\s+(.*)$/.exec(item);
+          if (task) item = (task[1] === " " ? "\u2610 " : "\u2611 ") + task[2];
+          out += "<li>" + mdInline(item);
+          i++;
+        }
+        while (stack.length) out += "</li></" + stack.pop().type + ">";
+        html += out;
+        continue;
+      }
+      para.push(line.trim());
+      i++;
+    }
+    flush();
+    return html;
+  }
+
+  // ── AI summary of the photo (Live tab, under the live and analyzed photos) ──
+  function renderFrameSum() {
+    const done = S.frames.find((f) => !f.pending && (f.text || f.error));
+    const busy = S.frames[0] && S.frames[0].pending ? S.frames[0] : null;
+    const body = $("fsBody"), meta = $("fsMeta");
+    if (!done) {
+      body.innerHTML = '<p class="muted">' + (busy ? "Analyzing photo #" + busy.idx + "\u2026" : "Appears here as soon as the first photo is analyzed.") + "</p>";
+      meta.textContent = "";
+      return;
+    }
+    body.innerHTML = done.error ? '<p class="err">Not analyzed: ' + escHTML(done.error) + "</p>" : md(done.text);
+    const bits = ["Photo #" + done.idx + " at " + done.time];
+    if (S.by) bits.push("by " + S.by);
+    if (done.tokens) bits.push(fmtNum(done.tokens) + " tokens");
+    if (done.ms) bits.push((done.ms / 1000).toFixed(1) + " s");
+    if (busy) bits.push("analyzing #" + busy.idx + "\u2026");
+    meta.textContent = bits.join(", ");
+  }
+
+  // ── session controls in the header: Start, Pause/Resume, Stop ──
+  function updateControls() {
+    const run = S.running, paused = run && S.paused;
+    $("hStart").classList.toggle("hidden", run);
+    $("hPause").classList.toggle("hidden", !run);
+    $("hStop").classList.toggle("hidden", !run);
+    $("hStart").disabled = starting;
+    $("hPause").innerHTML = paused ? ICON_PLAY : ICON_PAUSE;
+    $("hPause").setAttribute("aria-label", paused ? "Resume session" : "Pause session");
+    $("hPause").classList.toggle("resume", !!paused);
+    $("statusBox").classList.toggle("paused", !!paused);
+  }
+  function pauseSession() {
+    const sess = S;
+    if (!sess.running || sess.paused) return;
+    sess.paused = true;
+    sess.pausedAt = Date.now();
+    wake(sess);                       // cut the wait; the loop then waits for Resume
+    updateControls();
+    setStatus("Paused");
+    renderCountdown();
+    renderTabs();
+  }
+  function resumeSession() {
+    const sess = S;
+    if (!sess.running || !sess.paused) return;
+    const d = Date.now() - sess.pausedAt;
+    sess.stats.paused = (sess.stats.paused || 0) + d;
+    sess.paused = false;
+    sess.trigOrder.forEach((id) => { const st = sess.trig[id]; if (st.nextAt) st.nextAt += d; });  // trigger timers paused too
+    if (sess.resumeWake) { const r = sess.resumeWake; sess.resumeWake = null; r(); }
+    updateControls();
+    renderTabs();
+    tickClock();
+  }
+  function pausedMs(sess) {
+    return (sess.stats.paused || 0) + (sess.paused && sess.pausedAt ? Date.now() - sess.pausedAt : 0);
+  }
+  function wireControls() {
+    $("hStart").innerHTML = ICON_PLAY;
+    $("hStop").innerHTML = ICON_STOP;
+    $("hStart").addEventListener("click", () => { if (!S.running) startSession(); });
+    $("hPause").addEventListener("click", () => (S.paused ? resumeSession() : pauseSession()));
+    $("hStop").addEventListener("click", () => endSession());
+    const hdr = $("hdr");
+    const stuck = () => hdr.classList.toggle("stuck", window.scrollY > 4);
+    window.addEventListener("scroll", stuck, { passive: true });
+    stuck();
+    updateControls();
+  }
+
+  // Told to the model with every photo: Markdown only when the task asks for it.
+  function mdHint(labelled) {
+    return "Formatting: write plain sentences unless the user task asks for formatting or visuals. If it does, " +
+      (labelled ? "FRAME and SUMMARY" : "\"frame\" and \"summary\"") +
+      " may use Markdown: headings, **bold**, lists, tables and code blocks. Text is shown in a fixed-width font, so draw bars with Unicode blocks inside a code block (for example: People \u2588\u2588\u2588\u2588\u2588\u2588\u2591\u2591\u2591\u2591 6), and gauges with <meter value=\"0.7\"></meter> or <progress value=\"3\" max=\"5\"></progress>. No other HTML." +
+      (labelled ? " Inside FRAME and SUMMARY, never start a line with FRAME:, SUMMARY:, STATE: or TRIGGERS:." : " Inside JSON strings, write line breaks as \\n.");
+  }
+
+  // ── tabs: Setup, Triggers, Live, Sessions ──
   let currentView = "setup";
   function showView(name) {
     currentView = name;
-    ["setup", "live", "sessions"].forEach((v) => {
+    ["setup", "triggers", "live", "sessions"].forEach((v) => {
       $("view-" + v).classList.toggle("hidden", v !== name);
       const tab = $("tab-" + v);
       tab.setAttribute("aria-selected", v === name ? "true" : "false");
@@ -2530,13 +2782,15 @@ const PAGE_JS = String.raw`
     window.scrollTo(0, 0);
   }
   function renderTabs() {
-    $("tab-live").innerHTML = (S.running ? '<span class="recdot" aria-hidden="true"></span>' : "") + "Live";
+    $("tab-live").innerHTML = (S.running ? '<span class="recdot' + (S.paused ? " held" : "") + '" aria-hidden="true"></span>' : "") + "Live";
+    $("tab-live").setAttribute("aria-label", S.running ? (S.paused ? "Live, paused" : "Live, recording") : "Live");
     $("tab-sessions").innerHTML = "Sessions" + (sessions.length ? '<span class="cnt">' + sessions.length + "</span>" : "");
     $("liveIdle").classList.toggle("hidden", S.running);
     $("liveOn").classList.toggle("hidden", !S.running);
   }
   function wireTabs() {
     $("tab-setup").addEventListener("click", () => showView("setup"));
+    $("tab-triggers").addEventListener("click", () => showView("triggers"));
     $("tab-live").addEventListener("click", () => showView("live"));
     $("tab-sessions").addEventListener("click", () => {
       showView("sessions");
@@ -2544,7 +2798,6 @@ const PAGE_JS = String.raw`
       refreshSessions().then(() => { if (currentView === "sessions" && $("sesDetail").classList.contains("hidden")) showSessionList(); });
     });
     $("liveStart").addEventListener("click", () => startSession());
-    $("endBtn").addEventListener("click", () => endSession());
     renderTabs();
   }
 
@@ -2566,22 +2819,22 @@ const PAGE_JS = String.raw`
       : "Photo #" + f.idx + " analyzed";
   }
   function renderCountdown() {
-    if (!S.running) return;
-    const text = $("cdText"), sub = $("cdSub"), bar = $("cdBar"), fill = $("cdFill");
-    let busy = true, width = 100;
-    if (S.busyIdx) { text.textContent = isApple() ? "Taking photo #" + S.busyIdx + " in Shortcuts\u2026" : "Analyzing photo #" + S.busyIdx + "\u2026"; sub.textContent = ""; }
-    else if (S.triggerWaitIdx) { text.textContent = "Running triggers\u2026"; sub.textContent = "for photo #" + S.triggerWaitIdx; }
+    const sub = $("cdSub"), bar = $("cdBar"), fill = $("cdFill");
+    let busy = false, width = 0, note = "";
+    if (!S.running) { sub.textContent = ""; fill.style.width = "0"; bar.classList.remove("busy"); return; }
+    if (S.busyIdx) { busy = true; note = S.paused ? "pauses after this photo" : ""; }
+    else if (S.triggerWaitIdx) { busy = true; }
+    else if (S.paused) { note = "tap \u25B6 to resume"; }
     else if (S.nextAt) {
       const ms = Math.max(0, S.nextAt - Date.now());
-      text.textContent = "Next photo in " + Math.ceil(ms / 1000) + " s";
-      sub.textContent = "every " + cfg.interval + " s";
       width = Math.max(0, Math.min(100, 100 * (1 - ms / (cfg.interval * 1000))));
-      busy = false;
-    } else { text.textContent = "Taking a photo\u2026"; sub.textContent = ""; }
+      note = "every " + cfg.interval + " s";
+    } else busy = true;
     const prev = parseFloat(fill.style.width) || 0;
-    fill.style.transition = width < prev ? "none" : "";
-    fill.style.width = width + "%";
+    fill.style.transition = busy || width < prev ? "none" : "";
+    fill.style.width = (busy ? 100 : width) + "%";
     bar.classList.toggle("busy", busy);
+    sub.textContent = note;
   }
 
   // ── saving a finished session ──
@@ -2723,7 +2976,9 @@ const PAGE_JS = String.raw`
 
     box.appendChild(el("h2", null, rec.mode === "fresh" ? "Last moment" : "What happened"));
     const sc = el("div", "card");
-    sc.appendChild(el("p", "bigsum", rec.summary || "No photo was analyzed in this session."));
+    const bs = el("div", "bigsum md");
+    bs.innerHTML = rec.summary ? md(rec.summary) : "<p>No photo was analyzed in this session.</p>";
+    sc.appendChild(bs);
     if (rec.summaryAt) sc.appendChild(el("div", "meta num", (rec.mode === "fresh" ? "From photo #" : "Summary after photo #") + rec.summaryAt.idx + " at " + rec.summaryAt.time + ", " + (rec.mode === "fresh" ? "fresh for each photo" : "built up over the session") + "."));
     box.appendChild(sc);
 
@@ -2757,7 +3012,8 @@ const PAGE_JS = String.raw`
         const fig = el("figure");
         fig.appendChild(photoView(Object.assign({}, f, { img: imgs[f.idx], pending: false })));
         fig.appendChild(el("figcaption", "num", "#" + f.idx + " at " + f.time));
-        fig.appendChild(el("div", "note" + (f.error ? " err" : ""), f.error ? "Not analyzed: " + f.error : f.text || ""));
+        if (f.error) fig.appendChild(el("div", "note err", "Not analyzed: " + f.error));
+        else { const nt = el("div", "note md"); nt.innerHTML = md(f.text || ""); fig.appendChild(nt); }
         grid.appendChild(fig);
       });
       box.appendChild(grid);
@@ -3512,7 +3768,8 @@ const PAGE_JS = String.raw`
   }
 
   function parseLooseJSON(raw) {
-    const src = String(raw || "").replace(/\x60{3}(?:json)?/gi, "");
+    // Unwrap only a fence around the whole reply; fences inside the text (Markdown code blocks) stay.
+    const src = String(raw || "").trim().replace(/^\x60{3}[a-z]*[ \t]*\n/i, "").replace(/\n\x60{3}\s*$/, "");
     const a = src.search(/[{\[]/);
     if (a === -1) return null;
     const close = balancedEnd(src, a);
@@ -3608,7 +3865,7 @@ const PAGE_JS = String.raw`
   // ── timing ──
   function pause(sess, ms) {
     return new Promise((resolve) => {
-      if (ms <= 0 || !sess.running) return resolve();
+      if (ms <= 0 || !sess.running || sess.paused) return resolve();
       sess.nextAt = Date.now() + ms;
       sess.wake = resolve;
       sess.sleepTimer = setTimeout(() => { sess.wake = null; sess.nextAt = 0; resolve(); }, ms);
@@ -3622,11 +3879,13 @@ const PAGE_JS = String.raw`
   function tickClock() {
     renderStats();
     if (!S.running) return;
-    runDueTriggers(S);
+    if (!S.paused) runDueTriggers(S);
     if (S.trigOrder.length) renderTriggerStatus();
     if (S.busyIdx) setStatus((isApple() ? "Running the shortcut for photo #" : "Analyzing photo #") + S.busyIdx + "…");
     else if (S.triggerWaitIdx) setStatus("Running triggers for photo #" + S.triggerWaitIdx + "…");
+    else if (S.paused) setStatus("Paused");
     else if (S.nextAt) setStatus("Next photo in " + Math.max(0, Math.ceil((S.nextAt - Date.now()) / 1000)) + " s");
+    else setStatus("Taking a photo\u2026");
     renderCountdown();
   }
 
@@ -3636,7 +3895,7 @@ const PAGE_JS = String.raw`
   function renderStats() {
     const st = S.stats;
     const end = S.running ? Date.now() : st.end || st.start;
-    $("sElapsed").textContent = fmtDur(st.start ? end - st.start : 0);
+    $("sElapsed").textContent = fmtDur(st.start ? end - st.start - pausedMs(S) : 0);
     $("sPhotos").textContent = st.photos;
     $("sReq").textContent = st.requests;
     $("sTok").textContent = isApple() ? "–" : fmtNum(st.total);
@@ -3644,7 +3903,7 @@ const PAGE_JS = String.raw`
 
   function renderSummary() {
     const p = $("summary");
-    if (S.summary) { p.textContent = S.summary; p.classList.remove("muted"); }
+    if (S.summary) { p.innerHTML = md(S.summary); p.classList.remove("muted"); }
     else {
       p.textContent = isMoment()
         ? (S.running ? "Shows what the latest photo contains." : "Start a session. Each photo is described here on its own.")
@@ -3682,9 +3941,8 @@ const PAGE_JS = String.raw`
     hp.appendChild(finder);
 
     // What the latest photo itself showed, under the pair
-    const note = $("latestNote");
-    note.textContent = "";
-    if (latest) noteParts(latest, true).forEach((n) => note.appendChild(n));
+    $("latestNote").textContent = "";   // the photo's own summary now sits under the Live photos
+    renderFrameSum();
 
     renderNow();
 
@@ -3719,7 +3977,8 @@ const PAGE_JS = String.raw`
     const out = [];
     const cls = "text" + (f.pending ? " pending" : f.error ? " err" : "");
     const lead = big ? "This photo: " : "";
-    out.push(el("p", cls, f.pending ? "Analyzing…" : f.error ? "Not analyzed: " + f.error : lead + f.text));
+    if (f.pending || f.error) out.push(el("p", cls, f.pending ? "Analyzing…" : "Not analyzed: " + f.error));
+    else { const t = el("div", cls + " md"); t.innerHTML = md(lead + (f.text || "")); out.push(t); }
     const bits = [];
     if (!big) bits.push("#" + f.idx + ", " + f.time);
     if (f.tokens) bits.push(fmtNum(f.tokens) + " tokens");
@@ -3732,7 +3991,7 @@ const PAGE_JS = String.raw`
   function statsRows(sess) {
     const st = sess.stats;
     const rows = [
-      ["Duration", fmtDur(st.end - st.start)],
+      ["Duration", fmtDur(st.end - st.start - (st.paused || 0)) + (st.paused > 999 ? " (plus " + fmtDur(st.paused) + " paused)" : "")],
       ["Photos taken", st.photos],
       ["Requests sent", st.requests],
       ["Analyzed", st.ok],
@@ -3768,7 +4027,7 @@ const PAGE_JS = String.raw`
   function showModal() {
     const st = S.stats;
     const rows = [
-      ["Duration", fmtDur(st.end - st.start)],
+      ["Duration", fmtDur(st.end - st.start - (st.paused || 0)) + (st.paused > 999 ? " (plus " + fmtDur(st.paused) + " paused)" : "")],
       ["Photos taken", st.photos],
       ["Requests sent", st.requests],
       ["Analyzed", st.ok],
@@ -3816,6 +4075,7 @@ const PAGE_JS = String.raw`
     b.classList.toggle("stop", S.running);
     $("statusBox").classList.toggle("running", S.running);
     renderTabs();
+    updateControls();
   }
   function setStatus(t) { $("status").textContent = t; }
   function showError(msg) { const e = $("error"); e.textContent = msg; e.classList.remove("hidden"); }
