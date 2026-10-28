@@ -28,7 +28,7 @@ const STORE_FILE = "vision-session.json"; // presets + settings, in Scriptable's
 // ───────── Version and in-app updates ─────────
 // This build's version. When releasing, bump it and add a matching entry to releases.json.
 // Keep these two lines exactly in this form (single quotes): the updater reads them from downloads.
-const VERSION = '1.15.0';
+const VERSION = '1.16.0';
 const APP_ID = 'visionx';   // unique per app, never changes
 const REPO_RAW = 'https://raw.githubusercontent.com/gadominas/VisionX/main/';
 const SCRIPT_FILE = 'VisionX.js';   // the script's file name in the repository
@@ -768,6 +768,7 @@ textarea:focus,input:focus,select:focus{outline:none;border-color:var(--ink)}
 .tItem .chip{flex:none}
 .tsub{display:block;font-size:calc(12px * var(--ts));color:var(--graphite);overflow-wrap:anywhere}
 .trigForm{margin-top:10px;padding-top:4px;border-top:1px solid var(--rule)}
+#tPick{margin-bottom:6px}
 .trigStatus{display:grid;gap:6px;margin-bottom:14px}
 .trow{display:flex;gap:10px;align-items:flex-start;padding:8px 10px;border:1px solid var(--rule);border-radius:10px;background:var(--surface);transition:box-shadow .4s}
 .tdot{width:12px;height:12px;border-radius:50%;margin-top:4px;flex:none;background:var(--rule)}
@@ -1340,7 +1341,7 @@ body:not(.d-tiny) .older .text.md{max-height:4.6em;overflow:hidden;-webkit-mask-
     </select>
     <div id="appleBox" class="hidden">
       <label for="shortcut">Shortcut name</label>
-      <input id="shortcut" autocapitalize="off" autocorrect="off" spellcheck="false">
+      <input id="shortcut" list="scNames" autocapitalize="off" autocorrect="off" spellcheck="false">
       <label class="switch"><input type="checkbox" id="applePhotos" role="switch"><span>Show each photo here</span></label>
       <div class="hint">The photo comes back through the clipboard, so iOS asks you to allow pasting. To run hands-free, allow it once in iPhone Settings › Apps › Scriptable › Paste from Other Apps › Allow, or turn this off: the analysis and triggers still work, only the photo isn't shown.</div>
       <div class="hint">Each photo briefly opens Shortcuts, which takes the photo and asks Apple Intelligence, then returns here. Apple doesn't report token counts.</div>
@@ -1399,8 +1400,24 @@ body:not(.d-tiny) .older .text.md{max-height:4.6em;overflow:hidden;-webkit-mask-
         </select></div>
       </div>
       <div class="hint" id="tModeHint"></div>
-      <label for="tShortcut">Shortcut to run</label>
-      <input id="tShortcut" placeholder="Exact shortcut name" autocapitalize="off" autocorrect="off" spellcheck="false">
+      <div class="labelRow">
+        <label for="tShortcut">Shortcut to run</label>
+        <div class="chips"><button type="button" class="chip small" id="tLoadSc">Load my shortcuts</button></div>
+      </div>
+      <select id="tPick" class="hidden" aria-label="Choose one of your shortcuts"></select>
+      <input id="tShortcut" list="scNames" placeholder="Exact shortcut name" autocapitalize="off" autocorrect="off" spellcheck="false">
+      <div id="tScHint" class="hint" aria-live="polite"></div>
+      <details class="howto" id="tScHow">
+        <summary>Set up the shortcut list once</summary>
+        <ol>
+          <li>In Shortcuts, create a shortcut named <b>VisionX Shortcut List</b>.</li>
+          <li>Add <b>Get My Shortcuts</b>.</li>
+          <li>Add <b>Combine Text</b>: combine <b>My Shortcuts</b> with <b>New Lines</b>.</li>
+          <li>Add <b>Stop and Output</b> with the <b>Combined Text</b>.</li>
+          <li>Back here, tap <b>Load my shortcuts</b>. Shortcuts opens for a moment, then your shortcuts appear in the list above.</li>
+        </ol>
+      </details>
+      <datalist id="scNames"></datalist>
       <label for="tSend">Send to the shortcut</label>
       <select id="tSend">
         <option value="summary">The capture summary</option>
@@ -1423,6 +1440,7 @@ body:not(.d-tiny) .older .text.md{max-height:4.6em;overflow:hidden;-webkit-mask-
       <div class="hint">Shortcut Input is text, so photos aren’t sent.</div>
       <div class="presetBar">
         <button type="button" class="chip primary" id="tSave">Save trigger</button>
+        <button type="button" class="chip" id="tDup">Duplicate</button>
         <button type="button" class="chip danger" id="tDelete">Delete trigger</button>
         <button type="button" class="chip" id="tCancel">Cancel</button>
       </div>
@@ -1430,7 +1448,7 @@ body:not(.d-tiny) .older .text.md{max-height:4.6em;overflow:hidden;-webkit-mask-
     </div>
     <div id="checkBox" class="hidden">
       <label for="checkShortcut">Checker shortcut (Apple Intelligence)</label>
-      <input id="checkShortcut" autocapitalize="off" autocorrect="off" spellcheck="false">
+      <input id="checkShortcut" list="scNames" autocapitalize="off" autocorrect="off" spellcheck="false">
       <details class="howto">
         <summary>Set up the checker once</summary>
         <ol>
@@ -1605,7 +1623,7 @@ const PAGE_JS = String.raw`
   // Claude or OpenAI, as chosen in AI settings. Keys never reach this page.
   const cloud = { hasKey: !!(BOOT.ai && BOOT.ai.hasKey), name: (BOOT.ai && BOOT.ai.name) || "Claude", model: (BOOT.ai && BOOT.ai.model) || "" };
   const FIELDS = ["instructions", "interval", "engine", "shortcut", "checkShortcut", "detail", "maxSide", "facing"];
-  const TRIG_IDS = ["accumulate", "tAdd", "tName", "tCond", "tWhen", "tEvery", "tMode", "tShortcut", "tSend", "tMsg", "tSave", "tDelete", "tCancel"];
+  const TRIG_IDS = ["accumulate", "tAdd", "tName", "tCond", "tWhen", "tEvery", "tMode", "tShortcut", "tLoadSc", "tPick", "tSend", "tMsg", "tSave", "tDup", "tDelete", "tCancel"];
   const DEFAULTS = {
     instructions: "Count the different people you see and summarize them: appearance, what they are doing, and when they first appeared.",
     interval: 10,
@@ -4133,6 +4151,82 @@ const PAGE_JS = String.raw`
     return "Checks every " + t.every + " s";
   }
 
+  // ── the user's shortcuts, read once through a helper shortcut ──
+  // Scriptable can't list shortcuts itself, so VisionX runs one that outputs every name, one per line.
+  const LIST_SHORTCUT = "VisionX Shortcut List";
+  function shortcutNames() { return Array.isArray(cfg.shortcutNames) ? cfg.shortcutNames : []; }
+  function fillShortcutPickers() {
+    const names = shortcutNames();
+    const dl = $("scNames");
+    dl.textContent = "";
+    names.forEach((n) => { const o = el("option"); o.value = n; dl.appendChild(o); });
+    const sel = $("tPick"), cur = $("tShortcut").value.trim();
+    sel.textContent = "";
+    const head = el("option", null, names.indexOf(cur) !== -1 ? "Change shortcut\u2026" : "Choose from your " + names.length + " shortcuts\u2026");
+    head.value = "";
+    sel.appendChild(head);
+    names.forEach((n) => { const o = el("option", null, n); o.value = n; sel.appendChild(o); });
+    sel.value = names.indexOf(cur) !== -1 ? cur : "";
+    sel.classList.toggle("hidden", !names.length);
+    $("tLoadSc").textContent = names.length ? "Reload" : "Load my shortcuts";
+  }
+  function parseShortcutNames(text) {
+    const seen = {};
+    return String(text || "").split(/\r?\n/).map((n) => n.trim())
+      .filter((n) => n && n !== LIST_SHORTCUT && !seen[n] && (seen[n] = true))
+      .sort((a, b) => a.localeCompare(b));
+  }
+  async function loadShortcutNames() {
+    const btn = $("tLoadSc");
+    btn.disabled = true;
+    $("tScHint").textContent = "Opening Shortcuts to read your list\u2026";
+    try {
+      const r = await withShortcutLock(() => nativeCall("runShortcut", { shortcut: LIST_SHORTCUT, text: "" }, 120000));
+      const names = parseShortcutNames(r && r.text);
+      if (!names.length) throw new Error("the list came back empty. Check that \u201C" + LIST_SHORTCUT + "\u201D ends with Stop and Output");
+      cfg.shortcutNames = names;
+      persist();
+      fillShortcutPickers();
+      $("tScHow").open = false;
+      $("tScHint").textContent = names.length + " shortcuts loaded. Choose one above, or start typing to see matches.";
+    } catch (e) {
+      $("tScHow").open = true;
+      $("tScHint").textContent = "Couldn\u2019t load your shortcuts: " + e.message + ". Set up the list shortcut once (steps below), then try again.";
+    } finally {
+      btn.disabled = !!S.running;
+    }
+  }
+
+  // A copy of the trigger as it is on screen, saved right after the original, then opened for editing.
+  function copyName(name) {
+    const base = String(name || "Trigger").replace(/ copy( \d+)?$/, "");
+    for (let k = 1; ; k++) {
+      const suffix = k === 1 ? " copy" : " copy " + k;
+      const n = base.slice(0, 40 - suffix.length) + suffix;
+      if (!triggers.some((t) => t.name === n)) return n;
+    }
+  }
+  function duplicateTrigger() {
+    const src = triggers.find((x) => x.id === editingTrigger);
+    if (!src) return;
+    const pick = (id, fallback) => $(id).value.trim() || fallback;
+    const copy = Object.assign({}, src, {
+      id: "t-" + Date.now().toString(36),
+      condition: pick("tCond", src.condition),
+      shortcut: pick("tShortcut", src.shortcut),
+      every: Math.max(5, parseInt($("tEvery").value, 10) || src.every || 30),
+      when: $("tWhen").value, mode: $("tMode").value, send: $("tSend").value,
+      message: $("tMsg").value.trim(),
+    });
+    copy.name = copyName(pick("tName", src.name));
+    triggers.splice(triggers.indexOf(src) + 1, 0, copy);
+    persist();
+    renderTriggerList();
+    openTriggerForm(copy.id);
+    $("tHint").textContent = "Saved a copy as \u201C" + copy.name + "\u201D. The original is unchanged. Change what you need here, for example the shortcut, and tap Save trigger.";
+    $("trigForm").scrollIntoView({ block: "start", behavior: "smooth" });
+  }
+
   function openTriggerForm(id) {
     const t = triggers.find((x) => x.id === id) || { name: "", condition: "", every: 30, when: "interval", mode: "rise", shortcut: "", send: "summary", message: "" };
     editingTrigger = id || null;
@@ -4148,13 +4242,21 @@ const PAGE_JS = String.raw`
     $("tMsg").value = t.message || "";
     $("tMsgBox").classList.toggle("hidden", $("tSend").value !== "custom");
     $("tDelete").classList.toggle("hidden", !id);
+    $("tDup").classList.toggle("hidden", !id);
     $("tHint").textContent = "";
+    $("tScHint").textContent = shortcutNames().length ? "" : "Tap Load my shortcuts to pick from a list instead of typing.";
+    fillShortcutPickers();
     $("trigForm").classList.remove("hidden");
     $("tName").focus();
   }
 
   function wireTriggers() {
     $("tAdd").addEventListener("click", () => openTriggerForm(null));
+    $("tLoadSc").addEventListener("click", loadShortcutNames);
+    $("tPick").addEventListener("change", () => { if ($("tPick").value) { $("tShortcut").value = $("tPick").value; fillShortcutPickers(); } });
+    $("tShortcut").addEventListener("input", () => { const n = $("tShortcut").value.trim(); $("tPick").value = shortcutNames().indexOf(n) !== -1 ? n : ""; });
+    $("tDup").addEventListener("click", duplicateTrigger);
+    fillShortcutPickers();
     $("tCancel").addEventListener("click", () => $("trigForm").classList.add("hidden"));
     $("tWhen").addEventListener("change", updateTrigFormUI);
     $("tMode").addEventListener("change", updateTrigFormUI);

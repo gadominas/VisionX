@@ -2,6 +2,20 @@
 
 All notable changes to VisionX. Generated from `releases.json`; edit that file, not this one.
 
+## 1.16.0 (2026-10-29): Pick shortcuts, copy triggers
+
+- 📋 **Pick from your shortcuts**: Load your shortcut list once, then choose instead of typing exact names.
+- ⧉ **Duplicate a trigger**: Copy a trigger in one tap, then just change the shortcut.
+- ⌨️ **Suggestions as you type**: Every shortcut name field suggests matching shortcuts.
+
+**Changes**
+
+- Load my shortcuts in the trigger form reads all your shortcut names through a small helper shortcut, VisionX Shortcut List
+- Choose a shortcut from a picker above the name field; the list is remembered and can be reloaded
+- Shortcut name fields for triggers, Apple Intelligence and the checker suggest matching names as you type
+- Step-by-step setup for the helper shortcut, opened automatically if loading fails
+- Duplicate in the trigger form saves a copy of the trigger as shown, right after the original, and opens it for editing
+
 ## 1.15.0 (2026-10-29): Charts you can actually see
 
 - 📊 **Real charts in summaries**: Pie, bar and line charts from the AI now draw as graphics, not code.

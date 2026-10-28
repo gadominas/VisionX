@@ -4,6 +4,36 @@
   "script": "VisionX.js",
   "releases": [
     {
+      "version": "1.16.0",
+      "date": "2026-10-29",
+      "title": "Pick shortcuts, copy triggers",
+      "highlights": [
+        {
+          "icon": "📋",
+          "title": "Pick from your shortcuts",
+          "text": "Load your shortcut list once, then choose instead of typing exact names."
+        },
+        {
+          "icon": "⧉",
+          "title": "Duplicate a trigger",
+          "text": "Copy a trigger in one tap, then just change the shortcut."
+        },
+        {
+          "icon": "⌨️",
+          "title": "Suggestions as you type",
+          "text": "Every shortcut name field suggests matching shortcuts."
+        }
+      ],
+      "changes": [
+        "Load my shortcuts in the trigger form reads all your shortcut names through a small helper shortcut, VisionX Shortcut List",
+        "Choose a shortcut from a picker above the name field; the list is remembered and can be reloaded",
+        "Shortcut name fields for triggers, Apple Intelligence and the checker suggest matching names as you type",
+        "Step-by-step setup for the helper shortcut, opened automatically if loading fails",
+        "Duplicate in the trigger form saves a copy of the trigger as shown, right after the original, and opens it for editing"
+      ],
+      "fixes": []
+    },
+    {
       "version": "1.15.0",
       "date": "2026-10-29",
       "title": "Charts you can actually see",
