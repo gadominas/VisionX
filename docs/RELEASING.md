@@ -46,7 +46,7 @@ If a user skipped several versions, the pitch shows the newest release's highlig
 - VisionX checks `releases.json` once per run, in the background, without slowing the start.
 - **Update now** downloads the script over the current one; the user reopens VisionX to start the new version.
 - **Later**, or tapping outside the sheet, hides the pitch for two days.
-- Users can turn checks off with `const CHECK_UPDATES = false;` near the top of the script.
+- Users can turn checks off in Settings › Updates › Offer new versions (saved in `settings.json`).
 - An offer that arrives during a capture session waits until the session ends.
 
 ## Testing an update

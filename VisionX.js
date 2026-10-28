@@ -17,7 +17,7 @@
   setup steps are in the app under "Analyze with".
 
   Settings (instructions, interval, photo size…) are edited inside the app UI.
-  VisionX checks GitHub for new versions when it opens (see CHECK_UPDATES).
+  VisionX checks GitHub for new versions when it opens (Settings › Updates).
   Claude and OpenAI keys, models and token usage live under Settings › AI settings
   (github.com/gadominas/app-blueprints · ai-configuration). Keys stay in the iOS Keychain.
 */
@@ -28,13 +28,121 @@ const STORE_FILE = "vision-session.json"; // presets + settings, in Scriptable's
 // ───────── Version and in-app updates ─────────
 // This build's version. When releasing, bump it and add a matching entry to releases.json.
 // Keep these two lines exactly in this form (single quotes): the updater reads them from downloads.
-const VERSION = '1.8.0';
+const VERSION = '1.9.0';
 const APP_ID = 'visionx';   // unique per app, never changes
 const REPO_RAW = 'https://raw.githubusercontent.com/gadominas/VisionX/main/';
 const SCRIPT_FILE = 'VisionX.js';   // the script's file name in the repository
-const CHECK_UPDATES = true;   // offer new versions from GitHub (asks again 2 days after "Later")
 const UPDATE_SNOOZE_MS = 2 * 24 * 3600 * 1000;   // "Later" = 2 days
 const KC_UPDATE_SNOOZE = 'visionx-update-snooze';   // Keychain key, unique per app
+
+// ───────── Blueprints ─────────
+// Shared blueprints this app was built with (github.com/gadominas/app-blueprints). One line per blueprint, in this exact shape:
+// inventory tools read it without running the script, and Settings › Built with shows it.
+const BLUEPRINTS_REPO = 'https://github.com/gadominas/app-blueprints';
+const BLUEPRINTS = [
+  { id: 'in-app-updates', name: 'In-app updates', version: '1.0.0', since: '1.7.0' },
+  { id: 'settings', name: 'Settings', version: '1.0.0', since: '1.9.0' },
+  { id: 'ai-configuration', name: 'AI configuration', version: '1.0.0', since: '1.8.0' },
+];
+
+// ───────── Settings (app-blueprints · settings) ─────────
+// Appearance, updates and tunables live in settings.json in iCloud Drive › Scriptable › VisionX.
+// Presets, triggers and the session picks stay in vision-session.json (on this iPhone only), as before.
+const sfm = (() => { try { return FileManager.iCloud(); } catch (e) { return FileManager.local(); } })();
+const SET_DIR = sfm.joinPath(sfm.documentsDirectory(), "VisionX");
+const SP = (n) => sfm.joinPath(SET_DIR, n + ".json");
+async function load(n, def) {
+  const p = SP(n);
+  if (!sfm.fileExists(p)) return def;
+  try {
+    if (sfm.isFileStoredIniCloud(p) && !sfm.isFileDownloaded(p)) await sfm.downloadFileFromiCloud(p);
+    return JSON.parse(sfm.readString(p));
+  } catch (e) { return def; }   // a broken file falls back to defaults, never crashes
+}
+const write = (n, v) => {
+  try { if (!sfm.fileExists(SET_DIR)) sfm.createDirectory(SET_DIR, true); sfm.writeString(SP(n), JSON.stringify(v)); return true; }
+  catch (e) { console.warn("Couldn't save " + n + ": " + e); return false; }
+};
+// Defaults first, saved choices on top (loadSettings runs before the app starts).
+const settings = {
+  theme: "auto", density: "comfortable", font: "sans", textSize: 1,
+  checkUpdates: true,   // offer new versions from GitHub (asks again 2 days after "Later")
+  cfg: {},
+};
+const saveSettings = () => write("settings", settings);
+// Every key the page may change, with its check (all apply at once on the page).
+const SET_KEYS = {
+  theme: (v) => v === "auto" || !!PALETTES[v], density: (v) => ["comfortable", "compact", "tiny"].includes(v),
+  font: (v) => ["sans", "serif"].includes(v), textSize: (v) => [0.92, 1, 1.12, 1.25].includes(+v),
+  checkUpdates: "bool",
+};
+function setSetting(k, v) {
+  const s = SET_KEYS[k];
+  if (!s) return false;
+  if (s === "bool") v = v === true || v === "true";
+  else if (!s(v)) return false;
+  if (k === "textSize") v = +v;
+  settings[k] = v;
+  return true;
+}
+async function loadSettings() {
+  const saved = await load("settings", null);
+  if (saved) Object.assign(settings, saved);
+  const d = { theme: "auto", density: "comfortable", font: "sans", textSize: 1 };
+  for (const k of Object.keys(d)) if (!setSetting(k, settings[k])) settings[k] = d[k];
+  settings.cfg = settings.cfg && typeof settings.cfg === "object" ? settings.cfg : {};
+}
+// Everything tunable lives here; the Settings screen edits these (stored in settings.cfg, defaults below).
+const CONFIG = [
+  ["Capture", [
+    { k: "requestWait", label: "Time limit per AI request", help: "A photo whose answer takes longer is marked as not analyzed", unit: "s", def: 90, min: 30, max: 180, step: 10 },
+    { k: "keepFrames", label: "Photos kept on screen", help: "The latest photo and the ones before it; older photos leave memory", unit: "photos", def: 3, min: 1, max: 10, step: 1 },
+    { k: "debugKeep", label: "Photos kept in Debug", help: "Kept in memory only and cleared when a session starts", unit: "photos", def: 10, min: 5, max: 30, step: 5 },
+  ]],
+];
+const CFG_FLAT = CONFIG.flatMap(([, items]) => items);
+const cfgDef = (k) => CFG_FLAT.find((x) => x.k === k);
+const cfg = (k) => { const v = settings.cfg && settings.cfg[k]; return v === undefined ? cfgDef(k).def : v; };
+function setCfg(k, v) {
+  const d = cfgDef(k);
+  if (!d) return "Unknown setting";
+  settings.cfg = settings.cfg || {};
+  if (v === null) { delete settings.cfg[k]; return ""; }   // Reset
+  v = Number(String(v).replace(",", "."));   // accept a decimal comma
+  if (!isFinite(v)) v = d.def;
+  v = Math.min(d.max, Math.max(d.min, v));
+  v = d.step < 1 ? Math.round(v / d.step) * d.step : Math.round(v);
+  v = Number(v.toFixed(2));
+  if (v === d.def) delete settings.cfg[k]; else settings.cfg[k] = v;   // store only what differs
+  return "";
+}
+// Six palettes on the shared colour tokens. VisionX teal is the accent in all of them;
+// rec (the recording red) is this app's own extra colour.
+const PALETTES = {
+  ink:      { paper: "#F6F7F9", sheet: "#FFFFFF", ink: "#15181D", ink2: "#353B44", muted: "#5B6470", rule: "#DDE1E6", signal: "#0F766E", signalWash: "#DDF1EE", amber: "#9A6200", amberWash: "#FDF0D2", danger: "#C42B2E", rec: "#E5383B", scheme: "light" },
+  sepia:    { paper: "#F3EAD6", sheet: "#FBF5E6", ink: "#2A1F14", ink2: "#4B3B2A", muted: "#73604A", rule: "#E1D3B5", signal: "#1F6F63", signalWash: "#DDE7DC", amber: "#A16207", amberWash: "#F6E5BF", danger: "#9F1239", rec: "#C2342F", scheme: "light" },
+  mint:     { paper: "#F1F6F3", sheet: "#FFFFFF", ink: "#0D2318", ink2: "#2C4A3B", muted: "#556D60", rule: "#D3E2D9", signal: "#0F766E", signalWash: "#DCEFEA", amber: "#B45309", amberWash: "#FBEED8", danger: "#B91C1C", rec: "#DC2626", scheme: "light" },
+  contrast: { paper: "#FFFFFF", sheet: "#FFFFFF", ink: "#000000", ink2: "#111111", muted: "#333333", rule: "#9A9A9A", signal: "#005A52", signalWash: "#D9F2EE", amber: "#7A4B00", amberWash: "#FFEEC2", danger: "#A30000", rec: "#C00000", scheme: "light" },
+  slate:    { paper: "#1C2128", sheet: "#22272E", ink: "#E6EDF3", ink2: "#C5CED8", muted: "#9AA5B1", rule: "#373E47", signal: "#2DD4BF", signalWash: "#173A37", amber: "#E3B341", amberWash: "#3A2F12", danger: "#FF8A7A", rec: "#FF5C5E", scheme: "dark" },
+  night:    { paper: "#0E1116", sheet: "#161A21", ink: "#E8EBEF", ink2: "#C8CDD5", muted: "#8C96A3", rule: "#252B34", signal: "#2DD4BF", signalWash: "#12302D", amber: "#F0C52E", amberWash: "#2D240C", danger: "#FF6B6B", rec: "#FF4D4F", scheme: "dark" },
+};
+const PALETTE_CSS = Object.entries(PALETTES).map(([k, p]) => "[data-theme=" + k + "]{--paper:" + p.paper + ";--sheet:" + p.sheet + ";--ink:" + p.ink + ";--ink-2:" + p.ink2 + ";--muted:" + p.muted + ";--rule:" + p.rule + ";--signal:" + p.signal + ";--signal-wash:" + p.signalWash + ";--amber:" + p.amber + ";--amber-wash:" + p.amberWash + ";--danger:" + p.danger + ";--rec:" + p.rec + ";color-scheme:" + p.scheme + "}").join("\n");
+// The look for the first paint, so the page never flashes the default palette (the page keeps Auto live afterwards).
+function lookState() {
+  return { theme: settings.theme, density: settings.density, font: settings.font, textSize: settings.textSize,
+           shown: settings.theme === "auto" ? (Device.isUsingDarkAppearance() ? "night" : "ink") : settings.theme };
+}
+// What the Settings sheet shows. Keys never go to the page: AI settings has its own sheet.
+function settingsState() {
+  return {
+    settings: Object.fromEntries(Object.keys(SET_KEYS).map((k) => [k, settings[k]])),
+    cfg: Object.fromEntries(CFG_FLAT.map((d) => [d.k, cfg(d.k)])),
+    cfgSchema: CONFIG.map(([title, items]) => ({ title, items })),
+    palettes: PALETTES, version: VERSION, appName: "VisionX",
+    blueprints: BLUEPRINTS, blueprintsRepo: BLUEPRINTS_REPO,
+    hasKey: !!aiKey(), aiStatus: aiStatusLine(),
+  };
+}
 
 // Compares "1.10.0" and "1.9.2" as numbers: returns 1, 0 or -1.
 function cmpVer(a, b) {
@@ -49,7 +157,7 @@ function cmpVer(a, b) {
 
 // Never throws and never blocks: any failure just means no update is offered this time.
 async function checkForUpdate() {
-  if (!CHECK_UPDATES || updateSnoozed()) return null;
+  if (!settings.checkUpdates || updateSnoozed()) return null;
   try {
     const req = new Request(`${REPO_RAW}releases.json?t=${Date.now()}`);
     req.timeoutInterval = 10;
@@ -408,6 +516,30 @@ async function handleBridgeCall(wv, ctx, id) {
     else if (msg.type === "appleText") result = (await runShortcutText(msg.payload.shortcut, msg.payload.text)).text;
     else if (msg.type === "runShortcut") result = await runShortcutText(msg.payload.shortcut, msg.payload.text);
     else if (msg.type === "save") { writeStore(msg.payload); result = true; }
+    // Settings (app-blueprints · settings): each change is applied and saved at once; the answer is the fresh state.
+    else if (msg.type === "settings-get") result = settingsState();
+    else if (msg.type === "set") {
+      const q = msg.payload || {};
+      if (!setSetting(q.k, q.v)) throw new Error("That setting can\u2019t be changed here.");
+      saveSettings(); result = settingsState();
+    }
+    else if (msg.type === "cfg") {
+      const q = msg.payload || {};
+      if (q.k === "*") settings.cfg = {}; else setCfg(q.k, q.reset ? null : q.v);
+      saveSettings(); result = settingsState();
+    }
+    else if (msg.type === "update-check") {   // Settings › Check for updates now: clears "Later" and checks at once
+      clearUpdateSnooze();
+      const was = settings.checkUpdates; settings.checkUpdates = true;
+      const u = await checkForUpdate(); settings.checkUpdates = was;
+      ctx.update = u || ctx.update;
+      result = { available: !!u, info: u, msg: u ? "Version " + u.latest + " is available" : "You're on the latest version (" + VERSION + ")" };
+    }
+    else if (msg.type === "openurl") {   // Built with: only the blueprints repository opens from here
+      const v = String((msg.payload || {}).v || "");
+      if (v === BLUEPRINTS_REPO || v.startsWith(BLUEPRINTS_REPO + "/")) await Safari.openInApp(v, false);
+      result = true;
+    }
     else if (msg.type === "copy") { Pasteboard.copy(String(msg.payload.text || "")); result = true; }
     else if (msg.type === "updateLater") { snoozeUpdate(); ctx.update = null; result = true; }
     else if (msg.type === "updateNow") {
@@ -473,6 +605,7 @@ async function runAppleShortcut(p) {
 }
 
 async function main() {
+  await loadSettings();
   // 1.7.x kept one OpenAI key (or a "use Apple Intelligence only" choice) under other names.
   aiMigrate(["vision_session_openai_key"], null);
   if (Keychain.contains("vision_session_openai_key_skipped")) Keychain.remove("vision_session_openai_key_skipped");
@@ -483,6 +616,8 @@ async function main() {
     defaultShortcut: DEFAULT_SHORTCUT,
     version: VERSION,
     store: readStore(),
+    look: lookState(),
+    cfg: Object.fromEntries(CFG_FLAT.map((d) => [d.k, cfg(d.k)])),
   };
   const wv = new WebView();
   attachBridge(wv, ctx);
@@ -503,47 +638,48 @@ async function main() {
 // ───────────────────────────── Page ─────────────────────────────
 
 function buildHTML(boot) {
+  const look = lookState();
   return `<!doctype html>
-<html lang="en">
+<html lang="en" data-theme="${look.shown}" data-font="${look.font}" style="--ts:${look.textSize}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>VisionX</title>
 <style>
 :root{
-  --paper:#F6F7F9; --surface:#FFFFFF; --ink:#15181D; --graphite:#5B6470;
-  --rule:#DDE1E6; --rec:#E5383B; --done:#0F766E; --field:#EEF0F3;
-  color-scheme:light;
+  --ts:1; --serif: ui-serif, "New York", Georgia, serif; --rounded: ui-rounded, -apple-system, system-ui, sans-serif;
+  --display: var(--rounded); --pad:12px 14px; --gap:14px;
 }
-@media (prefers-color-scheme:dark){
-  :root{
-    --paper:#0E1116; --surface:#161A21; --ink:#E8EBEF; --graphite:#8C96A3;
-    --rule:#252B34; --rec:#FF4D4F; --done:#2DD4BF; --field:#1D222B;
-    color-scheme:dark;
-  }
-}
+html[data-font=serif]{--display:var(--serif)}
+${PALETTE_CSS}
+:root{--surface:var(--sheet);--graphite:var(--muted);--done:var(--signal);--field:color-mix(in srgb,var(--ink) 6%,var(--paper))}
+body.d-compact{--pad:9px 12px;--gap:10px}
+body.d-tiny{--pad:8px 12px;--gap:8px}
 *{box-sizing:border-box}
 html,body{touch-action:pan-x pan-y;-webkit-text-size-adjust:100%}
 button,select,input,label,summary{touch-action:manipulation}
 html,body{margin:0;background:var(--paper);color:var(--ink)}
 body{
-  font:16px/1.45 -apple-system,system-ui,sans-serif;
+  font:calc(16px * var(--ts))/1.45 -apple-system,system-ui,sans-serif;
   padding:calc(env(safe-area-inset-top,0px) + 14px) 16px calc(env(safe-area-inset-bottom,0px) + 32px);
   max-width:720px;margin:0 auto;
 }
 .num{font-family:ui-rounded,-apple-system,system-ui,sans-serif;font-variant-numeric:tabular-nums}
-h1{font:700 28px/1.1 ui-rounded,-apple-system,system-ui,sans-serif;margin:0;letter-spacing:-.01em}
-h2{font-size:17px;margin:0 0 6px}
+h1{font:700 calc(28px * var(--ts))/1.1 var(--display);margin:0;letter-spacing:-.01em}
+h2{font-size:calc(17px * var(--ts));margin:0 0 6px}
 .top{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}
-.status{display:flex;align-items:center;gap:8px;color:var(--graphite);font-size:14px}
+.topR{display:flex;align-items:center;gap:10px}
+.top .icon{width:40px;height:40px;border-radius:20px;display:grid;place-items:center;background:var(--sheet);border:1px solid var(--rule);color:var(--ink);padding:0;cursor:pointer;flex:none}
+.top .icon svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.status{display:flex;align-items:center;gap:8px;color:var(--graphite);font-size:calc(14px * var(--ts))}
 .dot{width:10px;height:10px;border-radius:50%;background:var(--rule)}
 .running .dot{background:var(--rec);animation:pulse 1.4s ease-in-out infinite}
 @keyframes pulse{50%{opacity:.35}}
 @media (prefers-reduced-motion:reduce){.running .dot{animation:none}}
 
-details.settings{background:var(--surface);border:1px solid var(--rule);border-radius:14px;padding:12px 14px;margin-bottom:14px}
+details.settings{background:var(--surface);border:1px solid var(--rule);border-radius:14px;padding:var(--pad);margin-bottom:var(--gap)}
 details.settings>summary{font-weight:600;cursor:pointer}
-label{display:block;font-size:13px;color:var(--graphite);margin-top:12px}
+label{display:block;font-size:calc(13px * var(--ts));color:var(--graphite);margin-top:12px}
 textarea,input,select{
   display:block;width:100%;margin-top:4px;padding:10px 12px;font:inherit;color:var(--ink);
   background:var(--field);border:1px solid transparent;border-radius:10px;
@@ -552,12 +688,12 @@ textarea{resize:vertical;min-height:80px}
 textarea:focus,input:focus,select:focus{outline:none;border-color:var(--ink)}
 :disabled{opacity:.55}
 .grid{display:grid;grid-template-columns:1fr 1fr;gap:0 12px}
-.hint{font-size:12px;color:var(--graphite);margin-top:4px}
-.howto{margin-top:10px;font-size:14px}
+.hint{font-size:calc(12px * var(--ts));color:var(--graphite);margin-top:4px}
+.howto{margin-top:10px;font-size:calc(14px * var(--ts))}
 .howto summary{cursor:pointer;color:var(--ink);font-weight:500}
 .howto ol{margin:8px 0 0;padding-left:20px}
 .howto li{margin:4px 0}
-.switch{display:flex;align-items:center;gap:12px;margin-top:16px;font-size:15px;color:var(--ink);cursor:pointer}
+.switch{display:flex;align-items:center;gap:12px;margin-top:16px;font-size:calc(15px * var(--ts));color:var(--ink);cursor:pointer}
 .switch input{
   -webkit-appearance:none;appearance:none;display:inline-block;flex:none;width:46px;height:28px;margin:0;padding:0;
   border:0;border-radius:14px;background:var(--rule);position:relative;cursor:pointer;transition:background .2s
@@ -567,7 +703,7 @@ textarea:focus,input:focus,select:focus{outline:none;border-color:var(--ink)}
 .switch input:checked::after{transform:translateX(18px)}
 .switch input:focus-visible{outline:3px solid var(--done);outline-offset:2px}
 @media (prefers-reduced-motion:reduce){.switch input,.switch input::after{transition:none}}
-.trigCount{font-weight:400;font-size:13px;color:var(--graphite);margin-left:6px}
+.trigCount{font-weight:400;font-size:calc(13px * var(--ts));color:var(--graphite);margin-left:6px}
 .trigList{display:grid;gap:8px;margin-top:10px}
 .tItem{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:10px;background:var(--field)}
 .tItem .switch,.trow .switch{margin:0;flex:none}
@@ -575,7 +711,7 @@ textarea:focus,input:focus,select:focus{outline:none;border-color:var(--ink)}
 .trow.off .tdot{background:transparent;border:2px solid var(--rule)}
 .tItem .tText{flex:1;min-width:0}
 .tItem .chip{flex:none}
-.tsub{display:block;font-size:12px;color:var(--graphite);overflow-wrap:anywhere}
+.tsub{display:block;font-size:calc(12px * var(--ts));color:var(--graphite);overflow-wrap:anywhere}
 .trigForm{margin-top:10px;padding-top:4px;border-top:1px solid var(--rule)}
 .trigStatus{display:grid;gap:6px;margin-bottom:14px}
 .trow{display:flex;gap:10px;align-items:flex-start;padding:8px 10px;border:1px solid var(--rule);border-radius:10px;background:var(--surface);transition:box-shadow .4s}
@@ -587,14 +723,14 @@ textarea:focus,input:focus,select:focus{outline:none;border-color:var(--ink)}
 .trow.lit .tdot{background:var(--done)}
 .trow.error .tdot{background:var(--rec)}
 .trow.flash{box-shadow:0 0 0 3px var(--done)}
-.tcount{flex:none;font:700 20px/1 ui-rounded,-apple-system,system-ui,sans-serif;color:var(--done);font-variant-numeric:tabular-nums}
+.tcount{flex:none;font:700 calc(20px * var(--ts))/1 ui-rounded,-apple-system,system-ui,sans-serif;color:var(--done);font-variant-numeric:tabular-nums}
 @media (prefers-reduced-motion:reduce){.trow{transition:none}.trow.checking .tdot,.trow.firing .tdot{animation:none}}
-.placeholder{aspect-ratio:4/3;display:grid;place-items:center;color:#9aa3ae;font-size:14px;background:#000}
+.placeholder{aspect-ratio:4/3;display:grid;place-items:center;color:#9aa3ae;font-size:calc(14px * var(--ts));background:#000}
 .presetBar{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
 .presetBar input{flex:1 1 150px;margin:0;width:auto}
 .chip{
   height:36px;padding:0 14px;border-radius:18px;border:1px solid var(--rule);
-  background:transparent;color:var(--ink);font:500 14px/1 -apple-system,system-ui,sans-serif;cursor:pointer
+  background:transparent;color:var(--ink);font:500 calc(14px * var(--ts))/1 -apple-system,system-ui,sans-serif;cursor:pointer
 }
 .chip.primary{background:var(--ink);color:var(--paper);border-color:var(--ink)}
 .chip.danger{color:var(--rec)}
@@ -606,14 +742,14 @@ textarea:focus,input:focus,select:focus{outline:none;border-color:var(--ink)}
 .liveWrap.aiming{width:150px;height:150px}
 .live{display:block;width:100%;height:100%;object-fit:cover;transform-origin:center}
 .zoomRow{display:flex;align-items:center;gap:10px;margin:-2px 0 12px}
-.zoomRow label{margin:0;font-size:13px;color:var(--graphite);flex:none}
+.zoomRow label{margin:0;font-size:calc(13px * var(--ts));color:var(--graphite);flex:none}
 .zoomRow input[type=range]{flex:1;width:auto;margin:0;padding:0;background:transparent;border:0;accent-color:var(--done);height:28px}
 .zoomRow output{flex:none;min-width:3.2em;text-align:right;font-weight:600}
 .zoomRow .chip{height:30px;padding:0 10px;flex:none}
-.zoomHint{font-size:12px;color:var(--graphite);margin:-8px 0 12px}
+.zoomHint{font-size:calc(12px * var(--ts));color:var(--graphite);margin:-8px 0 12px}
 @media (prefers-reduced-motion:reduce){.liveWrap{transition:none}}
 .btn{
-  flex:1;height:56px;border:0;border-radius:28px;font:600 17px/1 -apple-system,system-ui,sans-serif;
+  flex:1;height:56px;border:0;border-radius:28px;font:600 calc(17px * var(--ts))/1 -apple-system,system-ui,sans-serif;
   color:#fff;background:var(--rec);cursor:pointer;
 }
 .btn.stop{background:var(--ink);color:var(--paper)}
@@ -623,15 +759,15 @@ textarea:focus,input:focus,select:focus{outline:none;border-color:var(--ink)}
 .strip{display:grid;grid-template-columns:repeat(4,1fr);border-top:1px solid var(--rule);border-bottom:1px solid var(--rule);margin-bottom:14px}
 .strip div{padding:10px 4px;text-align:center}
 .strip div+div{border-left:1px solid var(--rule)}
-.strip b{display:block;font-size:20px}
-.strip span{font-size:12px;color:var(--graphite)}
+.strip b{display:block;font-size:calc(20px * var(--ts))}
+.strip span{font-size:calc(12px * var(--ts));color:var(--graphite)}
 
-.error{background:color-mix(in srgb,var(--rec) 12%,var(--surface));border-left:4px solid var(--rec);padding:10px 12px;border-radius:8px;margin-bottom:14px;font-size:14px}
+.error{background:color-mix(in srgb,var(--rec) 12%,var(--surface));border-left:4px solid var(--rec);padding:10px 12px;border-radius:8px;margin-bottom:14px;font-size:calc(14px * var(--ts))}
 .hidden{display:none!important}
 
 .muted{color:var(--graphite)}
-.tracked{margin:10px 0 0;font-size:13px;color:var(--graphite)}
-.tracked pre.old{white-space:pre-wrap;word-break:break-word;background:var(--field);padding:10px;border-radius:8px;font-size:12px;margin:6px 0 0;max-height:240px;overflow:auto}
+.tracked{margin:10px 0 0;font-size:calc(13px * var(--ts));color:var(--graphite)}
+.tracked pre.old{white-space:pre-wrap;word-break:break-word;background:var(--field);padding:10px;border-radius:8px;font-size:calc(12px * var(--ts));margin:6px 0 0;max-height:240px;overflow:auto}
 
 /* Latest frame: the viewfinder */
 .finder{position:relative;border-radius:6px;overflow:hidden;background:#000}
@@ -643,7 +779,7 @@ textarea:focus,input:focus,select:focus{outline:none;border-color:var(--ink)}
 .finder::after{top:10px;right:10px;border-left:0;border-bottom:0}
 .finder i::before{bottom:10px;left:10px;border-right:0;border-top:0}
 .finder i::after{bottom:10px;right:10px;border-left:0;border-top:0}
-.tag{position:absolute;left:14px;bottom:14px;background:rgba(0,0,0,.6);color:#fff;font-size:13px;padding:3px 8px;border-radius:6px}
+.tag{position:absolute;left:14px;bottom:14px;background:rgba(0,0,0,.6);color:#fff;font-size:calc(13px * var(--ts));padding:3px 8px;border-radius:6px}
 /* Latest photo and the running summary, side by side */
 .hero{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px;align-items:stretch}
 @media (min-width:600px){.hero{grid-template-columns:minmax(0,3fr) minmax(0,2fr)}}
@@ -652,20 +788,20 @@ textarea:focus,input:focus,select:focus{outline:none;border-color:var(--ink)}
 .hero .finder::before,.hero .finder::after,.hero .finder i::before,.hero .finder i::after{width:16px;height:16px;border-width:2px}
 .hero .finder::before{top:8px;left:8px}.hero .finder::after{top:8px;right:8px}
 .hero .finder i::before{bottom:8px;left:8px}.hero .finder i::after{bottom:8px;right:8px}
-.hero .tag{left:10px;bottom:10px;font-size:12px;padding:2px 6px}
+.hero .tag{left:10px;bottom:10px;font-size:calc(12px * var(--ts));padding:2px 6px}
 .heroSummary{position:relative;min-height:180px;background:var(--surface);border:1px solid var(--rule);border-radius:12px;transition:box-shadow .4s}
 .heroSummary .scroll{position:absolute;inset:0;overflow:auto;padding:10px 12px;-webkit-overflow-scrolling:touch}
-.heroSummary h2{font-size:13px;font-weight:600;color:var(--graphite);margin:0 0 6px}
-.heroSummary p{margin:0;font-size:15px;line-height:1.4;white-space:pre-wrap;word-break:break-word}
+.heroSummary h2{font-size:calc(13px * var(--ts));font-weight:600;color:var(--graphite);margin:0 0 6px}
+.heroSummary p{margin:0;font-size:calc(15px * var(--ts));line-height:1.4;white-space:pre-wrap;word-break:break-word}
 .heroSummary .meta{margin:8px 0 0}
 .heroSummary.fresh{box-shadow:0 0 0 2px var(--done)}
 @media (prefers-reduced-motion:reduce){.heroSummary{transition:none}}
-.latestNote .text{margin:10px 2px 0;font-size:15px}
-.meta{font-size:12px;color:var(--graphite);margin:8px 2px 0}
+.latestNote .text{margin:10px 2px 0;font-size:calc(15px * var(--ts))}
+.meta{font-size:calc(12px * var(--ts));color:var(--graphite);margin:8px 2px 0}
 
 .older{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:18px}
 .older img{display:block;width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:6px;background:#000}
-.older .text{font-size:13px;margin:6px 2px 0;display:-webkit-box;-webkit-line-clamp:6;-webkit-box-orient:vertical;overflow:hidden}
+.older .text{font-size:calc(13px * var(--ts));margin:6px 2px 0;display:-webkit-box;-webkit-line-clamp:6;-webkit-box-orient:vertical;overflow:hidden}
 .text.err{color:var(--rec)}
 .text.pending{color:var(--graphite);font-style:italic}
 
@@ -673,26 +809,26 @@ textarea:focus,input:focus,select:focus{outline:none;border-color:var(--ink)}
 .labelRow{display:flex;align-items:flex-end;justify-content:space-between;gap:8px;margin-top:12px}
 .labelRow label{margin:0}
 .labelRow .chips{display:flex;gap:6px;flex:none}
-.chip.small{height:30px;padding:0 10px;font-size:13px}
+.chip.small{height:30px;padding:0 10px;font-size:calc(13px * var(--ts))}
 .editor{
   position:fixed;inset:0;z-index:20;background:var(--paper);display:flex;flex-direction:column;overflow:auto;
   padding:calc(env(safe-area-inset-top,0px) + 10px) 16px calc(env(safe-area-inset-bottom,0px) + 20px)
 }
 .edHead{display:flex;align-items:center;gap:10px}
 .edTitles{flex:1;min-width:0;text-align:center}
-.edTitles h2{margin:0;font-size:17px}
+.edTitles h2{margin:0;font-size:calc(17px * var(--ts))}
 .edTitles .hint{margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-#edText{flex:0 0 auto;height:32vh;min-height:180px;margin-top:12px;font-size:16px;line-height:1.5;resize:none}
+#edText{flex:0 0 auto;height:32vh;min-height:180px;margin-top:12px;font-size:calc(16px * var(--ts));line-height:1.5;resize:none}
 .edMeta{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:6px;min-height:30px}
 .edRefine{margin-top:14px;padding-top:12px;border-top:1px solid var(--rule)}
-.edRefine h2{font-size:15px;margin:0}
+.edRefine h2{font-size:calc(15px * var(--ts));margin:0}
 .edGo{width:100%;margin-top:10px}
 .edSuggest{margin-top:12px}
-.edProposal{white-space:pre-wrap;background:var(--surface);border:1px solid var(--done);border-radius:10px;padding:10px 12px;margin-top:6px;font-size:15px;line-height:1.45}
+.edProposal{white-space:pre-wrap;background:var(--surface);border:1px solid var(--done);border-radius:10px;padding:10px 12px;margin-top:6px;font-size:calc(15px * var(--ts));line-height:1.45}
 :root{--jk:#1d4ed8;--js:#0f766e;--jn:#b45309;--jb:#be185d;--jp:#6b7280}
 @media (prefers-color-scheme:dark){:root{--jk:#7cb7ff;--js:#5eead4;--jn:#fbbf24;--jb:#f472b6;--jp:#8c96a3}}
 .jk{color:var(--jk)}.js{color:var(--js)}.jn{color:var(--jn)}.jb{color:var(--jb);font-weight:600}.jp{color:var(--jp)}.jl{font-weight:700;color:var(--ink)}
-.code{font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;white-space:pre-wrap;word-break:break-word;background:var(--field);color:var(--ink);padding:10px;border-radius:8px;max-height:280px;overflow:auto;margin:4px 0 0}
+.code{font:calc(12px * var(--ts))/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;white-space:pre-wrap;word-break:break-word;background:var(--field);color:var(--ink);padding:10px;border-radius:8px;max-height:280px;overflow:auto;margin:4px 0 0}
 .code.bad{color:var(--rec)}
 #debugBox{margin-top:18px}
 .dbgList{display:grid;gap:8px;margin-top:10px}
@@ -701,92 +837,161 @@ details.dbg{border:1px solid var(--rule);border-radius:10px;background:var(--sur
 .dbgHead::-webkit-details-marker{display:none}
 .dbgHead img,.dbgNoImg{width:44px;height:44px;border-radius:6px;object-fit:cover;flex:none;background:#000}
 .dbgText{flex:1;min-width:0}
-.dbgStatus{flex:none;font-size:12px;font-weight:600;padding:2px 8px;border-radius:10px}
+.dbgStatus{flex:none;font-size:calc(12px * var(--ts));font-weight:600;padding:2px 8px;border-radius:10px}
 .dbgStatus.good{color:var(--done)}.dbgStatus.bad{color:var(--rec)}.dbgStatus.wait{color:var(--graphite)}
 .dbgBody{padding:0 10px 10px}
-.dbgBody h3{font-size:12px;font-weight:600;color:var(--graphite);margin:12px 0 0}
+.dbgBody h3{font-size:calc(12px * var(--ts));font-weight:600;color:var(--graphite);margin:12px 0 0}
 .dbgPhoto{display:block;max-width:100%;max-height:40vh;border-radius:6px;margin-top:4px}
 details.dbgCheck{margin-top:10px;border-top:1px solid var(--rule);padding-top:6px}
-details.dbgCheck>summary{font-size:13px;cursor:pointer}
+details.dbgCheck>summary{font-size:calc(13px * var(--ts));cursor:pointer}
 #aisheet{--ai-paper:var(--paper);--ai-sheet:var(--surface);--ai-rule:var(--rule);--ai-ink:var(--ink);--ai-muted:var(--graphite);--ai-signal:var(--done);--ai-wash:color-mix(in srgb,var(--ai-signal) 14%,transparent);--ai-danger:var(--rec);
-  position:fixed;inset:0;z-index:40;background:var(--ai-paper);color:var(--ai-ink);transform:translateY(102%);visibility:hidden;transition:transform .28s ease,visibility 0s linear .28s;overflow-y:auto;-webkit-overflow-scrolling:touch;font:15px/1.4 -apple-system,system-ui,sans-serif;text-align:left}
+  position:fixed;inset:0;z-index:40;background:var(--ai-paper);color:var(--ai-ink);transform:translateY(102%);visibility:hidden;transition:transform .28s ease,visibility 0s linear .28s;overflow-y:auto;-webkit-overflow-scrolling:touch;font:calc(15px * var(--ts))/1.4 -apple-system,system-ui,sans-serif;text-align:left}
 #aisheet.open{transform:none;visibility:visible;transition:transform .28s ease}
 #aisheet *{box-sizing:border-box}
 #aisheet button{font:inherit;color:inherit;background:none;border:0;margin:0;padding:0;cursor:pointer;-webkit-appearance:none;appearance:none;touch-action:manipulation}
 #aisheet .sh-head{position:sticky;top:0;z-index:1;display:flex;align-items:center;justify-content:space-between;padding:calc(10px + env(safe-area-inset-top,0px)) 16px 10px;background:var(--ai-paper);border-bottom:1px solid var(--ai-rule)}
-#aisheet .sh-head h2{margin:0;font-size:22px;font-weight:700}
+#aisheet .sh-head h2{margin:0;font-size:calc(22px * var(--ts));font-weight:700}
 #aisheet .sh-body{padding:4px 16px calc(28px + env(safe-area-inset-bottom,0px));max-width:680px;margin:0 auto}
-#aisheet .link{color:var(--ai-signal);font-weight:600;font-size:17px;padding:8px 0 8px 12px}
-#aisheet .hint{font-size:14px;color:var(--ai-muted);margin:12px 0 0}
-#aisheet .muted{color:var(--ai-muted)} #aisheet .small{font-size:13px} #aisheet .pad{padding:4px 0 8px;margin:0}
-#aisheet .note{font-size:12.5px;color:var(--ai-muted);margin:6px 0 0}
-#aisheet .sec{font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ai-muted);margin:24px 0 8px}
-#aisheet .sm{font-size:14px;font-weight:600;padding:8px 12px;border-radius:9px;border:1px solid var(--ai-rule);background:var(--ai-sheet);color:var(--ai-ink)}
+#aisheet .link{color:var(--ai-signal);font-weight:600;font-size:calc(17px * var(--ts));padding:8px 0 8px 12px}
+#aisheet .hint{font-size:calc(14px * var(--ts));color:var(--ai-muted);margin:12px 0 0}
+#aisheet .muted{color:var(--ai-muted)} #aisheet .small{font-size:calc(13px * var(--ts))} #aisheet .pad{padding:4px 0 8px;margin:0}
+#aisheet .note{font-size:calc(12.5px * var(--ts));color:var(--ai-muted);margin:6px 0 0}
+#aisheet .sec{font-size:calc(13px * var(--ts));font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ai-muted);margin:24px 0 8px}
+#aisheet .sm{font-size:calc(14px * var(--ts));font-weight:600;padding:8px 12px;border-radius:9px;border:1px solid var(--ai-rule);background:var(--ai-sheet);color:var(--ai-ink)}
 #aisheet .sm.primary{background:var(--ai-signal);border-color:var(--ai-signal);color:#fff}
 #aisheet .srow{display:flex;align-items:center;gap:12px;background:var(--ai-sheet);border:1px solid var(--ai-rule);border-radius:14px;padding:12px 14px;margin:8px 0}
-#aisheet .grow{flex:1;min-width:0} #aisheet .grow b{display:block;font-weight:600} #aisheet .grow small{display:block;font-size:13px;margin-top:2px}
+#aisheet .grow{flex:1;min-width:0} #aisheet .grow b{display:block;font-weight:600} #aisheet .grow small{display:block;font-size:calc(13px * var(--ts));margin-top:2px}
 #aisheet .switch{flex:none;width:51px;height:31px;border-radius:16px;background:var(--ai-rule);position:relative;transition:background .2s}
 #aisheet .switch::after{content:"";position:absolute;top:2px;left:2px;width:27px;height:27px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.3);transition:transform .2s}
 #aisheet .switch.on{background:var(--ai-signal)} #aisheet .switch.on::after{transform:translateX(20px)}
 #aisheet .aicard,#aisheet .ucard{background:var(--ai-sheet);border:1px solid var(--ai-rule);border-radius:14px;padding:14px;margin:14px 0}
 #aisheet .aicard.active{border-color:var(--ai-signal);box-shadow:0 0 0 1px var(--ai-signal)}
-#aisheet .aic-h{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:17px}
-#aisheet .aic-row{display:flex;align-items:center;gap:10px;margin-top:10px;font-size:14px}
+#aisheet .aic-h{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:calc(17px * var(--ts))}
+#aisheet .aic-row{display:flex;align-items:center;gap:10px;margin-top:10px;font-size:calc(14px * var(--ts))}
 #aisheet .aic-row.lbl,#aisheet .aic-row .lbl{font-weight:600}
-#aisheet code{font:13px ui-monospace,Menlo,monospace;background:var(--ai-paper);border:1px solid var(--ai-rule);border-radius:6px;padding:2px 6px}
+#aisheet code{font:calc(13px * var(--ts)) ui-monospace,Menlo,monospace;background:var(--ai-paper);border:1px solid var(--ai-rule);border-radius:6px;padding:2px 6px}
 #aisheet .aic-btns{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:10px}
 #aisheet .sm[disabled]{opacity:.5}
-#aisheet .modelsel{display:block;width:100%;margin-top:6px;font:16px -apple-system,system-ui,sans-serif;color:var(--ai-ink);background:var(--ai-paper);border:1px solid var(--ai-rule);border-radius:9px;padding:9px 10px}
+#aisheet .modelsel{display:block;width:100%;margin-top:6px;font:calc(16px * var(--ts)) -apple-system,system-ui,sans-serif;color:var(--ai-ink);background:var(--ai-paper);border:1px solid var(--ai-rule);border-radius:9px;padding:9px 10px}
 #aisheet .danger{color:var(--ai-danger)} #aisheet .danger.armed{background:var(--ai-danger);color:#fff;border-color:var(--ai-danger)}
 #aisheet .ustat{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:10px 0 4px}
 #aisheet .ustat div{background:var(--ai-paper);border-radius:10px;padding:8px 10px}
-#aisheet .ustat b{display:block;font-size:20px;font-weight:700}
-#aisheet .ustat small{color:var(--ai-muted);font-size:12px}
+#aisheet .ustat b{display:block;font-size:calc(20px * var(--ts));font-weight:700}
+#aisheet .ustat small{color:var(--ai-muted);font-size:calc(12px * var(--ts))}
 #aisheet .ubars{display:flex;align-items:flex-end;gap:3px;height:56px;margin-top:10px}
 #aisheet .ubars span{flex:1;background:var(--ai-signal);border-radius:3px 3px 0 0;min-height:2px}
 #aisheet .ubars span.zero{background:var(--ai-rule)}
-#aisheet .ubars-l{display:flex;justify-content:space-between;font-size:11.5px;color:var(--ai-muted);margin-top:4px}
-#aisheet .utab{width:100%;border-collapse:collapse;margin-top:12px;font-size:13px}
+#aisheet .ubars-l{display:flex;justify-content:space-between;font-size:calc(11.5px * var(--ts));color:var(--ai-muted);margin-top:4px}
+#aisheet .utab{width:100%;border-collapse:collapse;margin-top:12px;font-size:calc(13px * var(--ts))}
 #aisheet .utab th{text-align:left;font-weight:600;color:var(--ai-muted);padding:4px 4px 4px 0;border-bottom:1px solid var(--ai-rule)}
 #aisheet .utab td{padding:6px 4px 6px 0;border-bottom:1px solid var(--ai-rule);word-break:break-word}
 #aisheet .utab th:not(:first-child),#aisheet .utab td:not(:first-child){text-align:right;white-space:nowrap}
-#aitoast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom,0px));z-index:41;transform:translate(-50%,20px);opacity:0;visibility:hidden;max-width:90vw;padding:10px 16px;border-radius:18px;background:var(--ink);color:var(--paper);font:14px/1.35 -apple-system,system-ui,sans-serif;text-align:center;pointer-events:none;transition:transform .25s,opacity .25s,visibility 0s linear .25s}
+#aitoast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom,0px));z-index:41;transform:translate(-50%,20px);opacity:0;visibility:hidden;max-width:90vw;padding:10px 16px;border-radius:18px;background:var(--ink);color:var(--paper);font:calc(14px * var(--ts))/1.35 -apple-system,system-ui,sans-serif;text-align:center;pointer-events:none;transition:transform .25s,opacity .25s,visibility 0s linear .25s}
 #aitoast.on{transform:translate(-50%,0);opacity:1;visibility:visible;transition:transform .25s,opacity .25s}
-.badge-ai{display:inline-block;font-size:12px;font-weight:700;color:var(--done);background:color-mix(in srgb,var(--done) 14%,transparent);border-radius:6px;padding:2px 8px}
-.badge-ex{display:inline-block;font-size:12px;font-weight:600;color:var(--graphite);border:1px dashed var(--graphite);border-radius:6px;padding:1px 8px}
+.badge-ai{display:inline-block;font-size:calc(12px * var(--ts));font-weight:700;color:var(--done);background:color-mix(in srgb,var(--done) 14%,transparent);border-radius:6px;padding:2px 8px}
+.badge-ex{display:inline-block;font-size:calc(12px * var(--ts));font-weight:600;color:var(--graphite);border:1px dashed var(--graphite);border-radius:6px;padding:1px 8px}
 #summaryBy{margin:2px 0 6px}
 #upd{position:fixed;inset:0;z-index:30;background:rgba(0,0,0,.55);display:flex;align-items:flex-end;justify-content:center}
 .updp{width:100%;max-width:720px;max-height:92vh;overflow:auto;background:var(--surface);color:var(--ink);border-radius:22px 22px 0 0;padding:20px 18px calc(16px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:8px}
 .updp:focus{outline:none}
-.updtag{align-self:flex-start;background:var(--done);color:var(--paper);font-size:12px;font-weight:800;padding:4px 10px;border-radius:999px}
-.updt{margin:6px 0 0;font:700 22px/1.2 ui-rounded,-apple-system,system-ui,sans-serif}
-.upds{color:var(--graphite);font-size:14px}
+.updtag{align-self:flex-start;background:var(--done);color:var(--paper);font-size:calc(12px * var(--ts));font-weight:800;padding:4px 10px;border-radius:999px}
+.updt{margin:6px 0 0;font:700 calc(22px * var(--ts))/1.2 ui-rounded,-apple-system,system-ui,sans-serif}
+.upds{color:var(--graphite);font-size:calc(14px * var(--ts))}
 .updl{display:flex;flex-direction:column;gap:10px;margin:8px 0 6px}
 .updi{display:flex;gap:12px;align-items:flex-start;background:var(--field);border-radius:14px;padding:12px}
-.updic{font-size:24px;line-height:1.1;flex:none}
-.updi b{display:block;font-size:15px}
-.updi span{display:block;color:var(--graphite);font-size:13px;line-height:1.35;margin-top:2px}
-.updmsg{font-size:14px}
+.updic{font-size:calc(24px * var(--ts));line-height:1.1;flex:none}
+.updi b{display:block;font-size:calc(15px * var(--ts))}
+.updi span{display:block;color:var(--graphite);font-size:calc(13px * var(--ts));line-height:1.35;margin-top:2px}
+.updmsg{font-size:calc(14px * var(--ts))}
 .updmsg:empty{display:none}
 .updgo{flex:none;width:100%}
-.updlater{height:46px;border:0;border-radius:23px;background:var(--field);color:var(--ink);font:600 15px/1 -apple-system,system-ui,sans-serif;cursor:pointer}
-.ver{text-align:center;color:var(--graphite);font-size:12px;margin:24px 0 0}
+.updlater{height:46px;border:0;border-radius:23px;background:var(--field);color:var(--ink);font:600 calc(15px * var(--ts))/1 -apple-system,system-ui,sans-serif;cursor:pointer}
+.ver{text-align:center;color:var(--graphite);font-size:calc(12px * var(--ts));margin:24px 0 0}
 .modal{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:flex-end;justify-content:center;z-index:10}
 .sheet{
   background:var(--surface);width:100%;max-width:720px;max-height:88vh;overflow:auto;
   border-radius:20px 20px 0 0;padding:20px 18px calc(env(safe-area-inset-bottom,0px) + 20px)
 }
 .sheet table{width:100%;border-collapse:collapse;margin:12px 0 16px}
-.sheet td{padding:7px 0;border-bottom:1px solid var(--rule);font-size:15px}
+.sheet td{padding:7px 0;border-bottom:1px solid var(--rule);font-size:calc(15px * var(--ts))}
 .sheet td+td{text-align:right}
-.sheet .final{white-space:pre-wrap;background:var(--field);padding:12px;border-radius:10px;font-size:14px}
+.sheet .final{white-space:pre-wrap;background:var(--field);padding:12px;border-radius:10px;font-size:calc(14px * var(--ts))}
 .sheet .btn{width:100%;margin-top:16px;flex:none}
+
+/* Tiny: older photos as one line each (number, time and summary); tap one to see it whole */
+body.d-tiny .older{grid-template-columns:1fr;gap:0;margin-top:10px}
+body.d-tiny .older article{display:flex;flex-wrap:nowrap;align-items:baseline;gap:8px;padding:8px 0;border-top:1px solid var(--rule);cursor:pointer}
+body.d-tiny .older article .meta{order:-1;flex:none;margin:0}
+body.d-tiny .older article .text{flex:1;min-width:0;margin:0;display:block;-webkit-line-clamp:unset;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+body.d-tiny .older article:not(.open) img,body.d-tiny .older article:not(.open) .placeholder{display:none}
+body.d-tiny .older article.open{flex-wrap:wrap}
+body.d-tiny .older article.open .text{white-space:normal}
+body.d-tiny .older article.open img{order:3;width:100%}
+/* Settings sheet (scoped: the app already uses .switch, .chip and .sheet) */
+#cfgsheet{position:fixed;inset:0;z-index:50;background:var(--paper);color:var(--ink);transform:translateY(102%);visibility:hidden;transition:transform .28s ease,visibility 0s linear .28s;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;text-align:left}
+#cfgsheet.open{transform:none;visibility:visible;transition:transform .28s ease}
+#cfgsheet button{font:inherit;color:inherit;background:none;border:0;border-radius:0;padding:0;font-weight:inherit;cursor:pointer;text-align:inherit}
+#cfgsheet .sh-head{position:sticky;top:0;z-index:2;background:var(--paper);display:flex;justify-content:space-between;align-items:center;padding:calc(env(safe-area-inset-top) + 14px) 18px 12px;border-bottom:1px solid var(--rule)}
+#cfgsheet .sh-head h2{font:700 calc(24px * var(--ts))/1 var(--display);margin:0}
+#cfgsheet .sh-body{padding:16px 18px calc(env(safe-area-inset-bottom) + 40px);max-width:680px;margin:0 auto}
+#cfgsheet .link{color:var(--signal);font-weight:600;font-size:16px}
+#cfgsheet .link.small{font-size:calc(14px * var(--ts))}
+#cfgsheet .hint{font-size:calc(13px * var(--ts));color:var(--muted);margin:8px 2px 0}
+#cfgsheet .muted{color:var(--muted)}
+#cfgsheet .sec{display:block;font:700 calc(17px * var(--ts))/1.2 var(--display);color:var(--ink);margin:26px 0 6px}
+#cfgsheet .srow{display:flex;align-items:center;gap:8px;padding:11px 0;border-bottom:1px solid var(--rule)}
+#cfgsheet .grow{flex:1;min-width:0}
+#cfgsheet .grow b{display:block;font-weight:600}
+#cfgsheet .grow small{display:block;font-size:calc(13px * var(--ts));color:var(--ink-2)}
+#cfgsheet .switch{width:46px;height:28px;border-radius:14px;background:var(--rule);position:relative;flex:none;transition:background .2s}
+#cfgsheet .switch::after{content:"";position:absolute;top:3px;left:3px;width:22px;height:22px;border-radius:11px;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.25);transition:transform .2s}
+#cfgsheet .switch.on{background:var(--signal)}
+#cfgsheet .switch.on::after{transform:translateX(18px)}
+#cfgsheet .sm{font-size:calc(13px * var(--ts));padding:6px 11px;border-radius:8px;border:1px solid var(--rule);background:var(--sheet);white-space:nowrap;flex:none}
+#cfgsheet .danger{color:var(--danger)}
+#cfgsheet .danger.armed{background:var(--danger);color:#fff;border-color:var(--danger)}
+#cfgsheet .seg{display:flex;flex:none;gap:0;padding:0;border:1px solid var(--rule);border-radius:9px;overflow:hidden;background:var(--sheet)}
+#cfgsheet .seg button{font-size:calc(12.5px * var(--ts));padding:6px 10px;color:var(--ink-2);white-space:nowrap}
+#cfgsheet .seg button.on{background:var(--ink);color:var(--paper);font-weight:600}
+#cfgsheet .seg.wide button{flex:1;text-align:center;padding:9px 4px;font-size:calc(13.5px * var(--ts))}
+#cfgsheet .lk-row{margin:10px 0 14px}
+#cfgsheet .lk-l{display:block;font-size:calc(13px * var(--ts));font-weight:600;color:var(--ink-2);margin-bottom:6px}
+#cfgsheet .sws{display:flex;gap:12px;overflow-x:auto;scrollbar-width:none;padding:3px 3px 2px}
+#cfgsheet .sws::-webkit-scrollbar{display:none}
+#cfgsheet .sw{display:flex;flex-direction:column;align-items:center;gap:5px;flex:none}
+#cfgsheet .sw .prev{position:relative;width:50px;height:50px;border-radius:13px;display:grid;place-items:center;border:1px solid rgba(127,127,127,.35);font:700 18px/1 var(--display)}
+#cfgsheet .sw .prev i{position:absolute;right:6px;bottom:6px;width:9px;height:9px;border-radius:5px}
+#cfgsheet .sw.on .prev{outline:2.5px solid var(--signal);outline-offset:2px}
+#cfgsheet .sw small{font-size:12px;color:var(--ink-2)}
+#cfgsheet .sw.on small{color:var(--ink);font-weight:600}
+#cfgsheet .cfg{padding:12px 0;border-bottom:1px solid var(--rule)}
+#cfgsheet .cfg.ch .cfg-h b::after{content:"";display:inline-block;width:7px;height:7px;border-radius:4px;background:var(--signal);margin-left:7px;vertical-align:2px}
+#cfgsheet .cfg-h{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+#cfgsheet .cfg-h b{font-weight:600}
+#cfgsheet .cfg small{display:block;font-size:calc(13px * var(--ts));margin-top:2px}
+#cfgsheet .stepper{display:flex;align-items:center;gap:6px;margin-top:8px;flex-wrap:wrap}
+#cfgsheet .stepper button{width:38px;height:36px;border-radius:9px;border:1px solid var(--rule);background:var(--sheet);font-size:20px;font-weight:600;text-align:center}
+#cfgsheet .stepper button[disabled]{opacity:.35}
+#cfgsheet .stepper input{width:86px;text-align:center;font:600 16px var(--sans);padding:7px 6px;border-radius:9px;border:1px solid var(--rule);background:var(--paper);color:var(--ink)}
+#cfgsheet .stepper .unit{font-size:calc(14px * var(--ts));color:var(--ink-2);min-width:2.5em}
+#cfgsheet .stepper .range{flex-basis:100%;font-size:calc(12px * var(--ts));color:var(--muted)}
+#cfgsheet .cfgin.wide,#cfgsheet .cfgsel{display:block;width:100%;margin-top:8px;font:16px/1.45 var(--sans);padding:9px 11px;border-radius:9px;border:1px solid var(--rule);background:var(--paper);color:var(--ink);-webkit-appearance:none;appearance:none}
+#cfgsheet textarea.cfgsel{resize:none}
+#cfgsheet .cfgin:focus,#cfgsheet .cfgsel:focus{outline:2px solid var(--signal);outline-offset:-1px}
+#cfgsheet .cfg-foot{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;margin-top:18px}
+#cfgsheet .note{font-size:12.5px;color:var(--muted)}
+#cfgsheet .srow.bp{width:100%;text-align:left}
+#cfgsheet .chev{flex:none;color:var(--muted);font-size:calc(20px * var(--ts));line-height:1}
+#cfgsheet input{-webkit-user-select:text;user-select:text}
 </style>
 </head>
-<body>
+<body class="d-${look.density}">
   <div class="top">
     <h1>VisionX</h1>
-    <div class="status" id="statusBox"><span class="dot"></span><span id="status">Ready</span></div>
+    <div class="topR">
+      <div class="status" id="statusBox"><span class="dot"></span><span id="status">Ready</span></div>
+      <button type="button" class="icon" id="cfgOpen" aria-label="Settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></svg></button>
+    </div>
   </div>
 
   <details class="settings" id="settingsBox" open>
@@ -843,10 +1048,6 @@ details.dbgCheck>summary{font-size:13px;cursor:pointer}
       <div class="oa"><label for="facing">Camera</label><select id="facing"><option value="environment">Back</option><option value="user">Front</option></select></div>
       <div class="oa"><label for="detail">Image detail (OpenAI)</label><select id="detail"><option value="low">Low (fewest tokens)</option><option value="auto">Auto</option><option value="high">High</option></select></div>
       <div class="oa"><label for="maxSide">Photo size sent</label><select id="maxSide"><option value="512">512 px</option><option value="768">768 px</option><option value="1024">1024 px</option><option value="1536">1536 px</option></select></div>
-    </div>
-    <label>Keys, models and token usage</label>
-    <div class="presetBar">
-      <button type="button" class="chip" id="aiOpen">AI settings</button>
     </div>
     <div id="aiStatus" class="hint" aria-live="polite"></div>
   </details>
@@ -1039,12 +1240,14 @@ const PAGE_JS = String.raw`
     return n;
   };
 
-  const REQUEST_TIMEOUT_MS = 90000;
-  const KEEP_FRAMES = 3;
-  const DEBUG_KEEP = 10; // photos kept in the debug log (memory only)
+  // Tunables from Settings › Capture (they change live when Settings changes them).
+  const BCFG = BOOT.cfg || {};
+  let REQUEST_TIMEOUT_MS = (BCFG.requestWait || 90) * 1000;
+  let KEEP_FRAMES = BCFG.keepFrames || 3;
+  let DEBUG_KEEP = BCFG.debugKeep || 10; // photos kept in the debug log (memory only)
   const LS_KEY = "vision-session-store-v2";
   const LS_OLD = "vision-session-settings-v1";
-  const PRESET_IDS = ["preset", "pUpdate", "pNew", "pDelete", "pName", "pSave", "pCancel", "aiOpen", "iRefine", "iExpand", "applePhotos"];
+  const PRESET_IDS = ["preset", "pUpdate", "pNew", "pDelete", "pName", "pSave", "pCancel", "iRefine", "iExpand", "applePhotos"];
   // Claude or OpenAI, as chosen in AI settings. Keys never reach this page.
   const cloud = { hasKey: !!(BOOT.ai && BOOT.ai.hasKey), name: (BOOT.ai && BOOT.ai.name) || "Claude", model: (BOOT.ai && BOOT.ai.model) || "" };
   const FIELDS = ["instructions", "interval", "engine", "shortcut", "checkShortcut", "detail", "maxSide", "facing"];
@@ -1091,7 +1294,8 @@ const PAGE_JS = String.raw`
   $("engine").addEventListener("change", () => { cfg.engine = $("engine").value; persist(); updateEngineUI(); });
   $("shortcut").addEventListener("change", () => { cfg.shortcut = $("shortcut").value.trim() || DEFAULTS.shortcut; persist(); });
   persist();
-  $("aiOpen").addEventListener("click", () => window.__aiOpen());
+  // Tiny layout: tap an older photo's line to see it whole
+  $("frames").addEventListener("click", (e) => { const a = e.target.closest("article"); if (a) a.classList.toggle("open"); });
   wireTriggers();
   wireEditor();
   wireDebug();
@@ -1289,8 +1493,10 @@ const PAGE_JS = String.raw`
     sel.value = cfg.engine;
     updateEngineUI();
     $("aiStatus").textContent = cloud.hasKey
-      ? "In use: " + cloud.name + " — " + cloud.model + "."
-      : "Add a Claude or OpenAI key to analyze photos in the cloud. Apple Intelligence works without one.";
+      ? "In use: " + cloud.name + " — " + cloud.model + ". Change it in Settings › AI settings."
+      : "Add a Claude or OpenAI key in Settings › AI settings to analyze photos in the cloud. Apple Intelligence works without one.";
+    const st = document.getElementById("s-aistatus");   // the AI settings row in Settings
+    if (st) st.textContent = cloud.hasKey ? cloud.name + " — " + cloud.model : "Add a Claude or OpenAI key for cloud analysis";
   }
   window.__aiChanged = (s) => {
     cloud.hasKey = s.hasKey;
@@ -1298,6 +1504,124 @@ const PAGE_JS = String.raw`
     cloud.model = s.model[s.provider];
     renderCloud();
   };
+
+  // ── Settings (app-blueprints · settings): every change applies at once and is saved; Done closes ──
+  const LOOK = Object.assign({ theme: "auto", density: "comfortable", font: "sans", textSize: 1 }, BOOT.look || {});
+  let SET = null, cfgIsOpen = false, cfgArmed = false;
+  const darkMQ = window.matchMedia ? matchMedia("(prefers-color-scheme: dark)") : { matches: false };
+  function applyLook() {
+    const root = document.documentElement;
+    root.dataset.theme = LOOK.theme === "auto" ? (darkMQ.matches ? "night" : "ink") : LOOK.theme;
+    root.dataset.font = LOOK.font;
+    root.style.setProperty("--ts", LOOK.textSize);
+    document.body.classList.remove("d-comfortable", "d-compact", "d-tiny");
+    document.body.classList.add("d-" + LOOK.density);
+  }
+  const onDark = () => { if (LOOK.theme === "auto") applyLook(); };
+  if (darkMQ.addEventListener) darkMQ.addEventListener("change", onDark); else if (darkMQ.addListener) darkMQ.addListener(onDark);
+  const hx = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+  const cfgSheet = () => {
+    let el = document.getElementById("cfgsheet");
+    if (!el) {
+      el = document.createElement("div"); el.id = "cfgsheet"; el.setAttribute("role", "dialog"); el.setAttribute("aria-label", "Settings");
+      document.body.appendChild(el);
+      el.addEventListener("click", cfgClick);
+      el.addEventListener("change", cfgChange);
+    }
+    return el;
+  };
+  const cfgItem = (k) => { for (const sec of SET.cfgSchema) for (const d of sec.items) if (d.k === k) return d; return null; };
+  const cfgChanged = (k) => { const d = cfgItem(k); return !!d && JSON.stringify(SET.cfg[k]) !== JSON.stringify(d.def); };
+  const fmtCfg = (d, v) => (d.step && d.step < 1 ? Number(v).toFixed(String(d.step).split(".")[1].length) : String(v));
+  const segRow = (k, opts, cur) => '<div class="seg wide">' + opts.map((o) => '<button class="' + (String(cur) === String(o[0]) ? "on" : "") + '" data-act="look" data-k="' + k + '" data-v="' + o[0] + '">' + hx(o[1]) + "</button>").join("") + "</div>";
+  function lookHTML() {
+    const P = SET.palettes, themes = [["auto", "Auto"]].concat(Object.keys(P).map((k) => [k, k.charAt(0).toUpperCase() + k.slice(1)]));
+    const sws = themes.map((t) => {
+      const k = t[0], l = t[1];
+      const st = k === "auto" ? "background:linear-gradient(135deg," + P.ink.paper + " 50%," + P.night.sheet + " 50%);color:" + P.night.signal : "background:" + P[k].paper + ";color:" + P[k].ink;
+      return '<button class="sw ' + (LOOK.theme === k ? "on" : "") + '" data-act="look" data-k="theme" data-v="' + k + '" aria-label="' + l + ' colours"><span class="prev" style="' + st + '">Aa<i style="background:' + (P[k] || P.night).signal + '"></i></span><small>' + l + "</small></button>";
+    }).join("");
+    return '<div class="lk-row"><span class="lk-l">Colours</span><div class="sws">' + sws + "</div></div>" +
+      '<div class="lk-row"><span class="lk-l">Layout</span>' + segRow("density", [["comfortable", "Comfortable"], ["compact", "Compact"], ["tiny", "Tiny"]], LOOK.density) + "</div>" +
+      '<div class="lk-row"><span class="lk-l">Text size</span>' + segRow("textSize", [[0.92, "Small"], [1, "Default"], [1.12, "Large"], [1.25, "Larger"]], LOOK.textSize) + "</div>" +
+      '<div class="lk-row"><span class="lk-l">Headline font</span>' + segRow("font", [["sans", "Sans serif"], ["serif", "Serif"]], LOOK.font) + "</div>";
+  }
+  function fieldHTML(d) {
+    const v = SET.cfg[d.k], ch = cfgChanged(d.k);
+    const reset = ch ? '<button class="link small" data-act="cfgreset" data-k="' + d.k + '">Reset</button>' : "";
+    return '<div class="cfg ' + (ch ? "ch" : "") + '"><div class="cfg-h"><b>' + hx(d.label) + "</b>" + reset + "</div>" + (d.help ? '<small class="muted">' + hx(d.help) + "</small>" : "") +
+      '<div class="stepper"><button data-act="cfgstep" data-k="' + d.k + '" data-v="-1" aria-label="Decrease" ' + (v <= d.min ? "disabled" : "") + ">\u2212</button>" +
+      '<input class="cfgin" data-k="' + d.k + '" value="' + fmtCfg(d, v) + '" inputmode="decimal" aria-label="' + hx(d.label) + '">' +
+      '<button data-act="cfgstep" data-k="' + d.k + '" data-v="1" aria-label="Increase" ' + (v >= d.max ? "disabled" : "") + ">+</button>" +
+      '<span class="unit">' + hx(d.unit || "") + '</span><span class="range">' + fmtCfg(d, d.min) + "\u2013" + fmtCfg(d, d.max) + (ch ? " \u2014 original " + fmtCfg(d, d.def) : "") + "</span></div></div>";
+  }
+  const bpLink = (b) => SET.blueprintsRepo + "/blob/" + b.id + "-v" + b.version + "/blueprints/" + b.id + ".md";
+  function builtWithHTML() {
+    return '<h3 class="sec">Built with</h3><p class="hint">' + hx(SET.appName) + " is built from shared blueprints that the other apps use too. Tap one to read how that part works.</p>" +
+      SET.blueprints.map((b) => '<button class="srow bp" data-act="openurl" data-v="' + hx(bpLink(b)) + '"><div class="grow"><b>' + hx(b.name) + '</b><small class="muted">Blueprint ' + hx(b.version) + " \u00B7 since " + hx(SET.appName) + " " + hx(b.since) + '</small></div><span class="chev" aria-hidden="true">\u203A</span></button>').join("") +
+      '<button class="srow bp" data-act="openurl" data-v="' + hx(SET.blueprintsRepo) + '"><div class="grow"><b>All blueprints</b><small class="muted">' + hx(SET.blueprintsRepo.replace("https://", "")) + '</small></div><span class="chev" aria-hidden="true">\u203A</span></button>';
+  }
+  function renderCfg() {
+    const el = cfgSheet(), keep = el.scrollTop;
+    el.classList.toggle("open", cfgIsOpen);
+    document.body.style.overflow = cfgIsOpen ? "hidden" : "";
+    if (!cfgIsOpen || !SET) return;
+    const s = SET.settings, changed = Object.keys(SET.cfg).filter(cfgChanged).length;
+    el.innerHTML = '<div class="sh-head"><h2>Settings</h2><button class="link" data-act="cfgclose">Done</button></div><div class="sh-body">' +
+      '<p class="hint">Changes apply right away and are kept on this iPhone.</p>' +
+      '<h3 class="sec">Appearance</h3>' + lookHTML() +
+      '<h3 class="sec">AI</h3>' +
+      '<div class="srow"><div class="grow"><b>Keys, models and token usage</b><small id="s-aistatus">' + hx(cloud.hasKey ? cloud.name + " \u2014 " + cloud.model : "Add a Claude or OpenAI key for cloud analysis") + "</small>" +
+        (S.running ? '<small class="muted">Available when the session ends</small>' : "") + '</div><button class="sm" data-act="ai-open"' + (S.running ? " disabled" : "") + ">AI settings</button></div>" +
+      '<h3 class="sec">Updates</h3>' +
+      '<div class="srow"><div class="grow"><b>Offer new versions</b><small>You have VisionX ' + hx(SET.version) + ". \u201CLater\u201D waits two days.</small></div>" +
+        '<button class="switch ' + (s.checkUpdates ? "on" : "") + '" data-act="toggle" data-v="checkUpdates" aria-label="Offer new versions"></button></div>' +
+      '<div class="srow"><div class="grow"><b>Check for updates now</b><small id="updmsg" class="muted" aria-live="polite"></small></div><button class="sm" data-act="updcheck">Check</button></div>' +
+      SET.cfgSchema.map((sec) => '<h3 class="sec">' + hx(sec.title) + "</h3>" + sec.items.map(fieldHTML).join("")).join("") +
+      '<div class="cfg-foot"><span class="note">' + (changed ? changed + " setting" + (changed === 1 ? "" : "s") + " changed" : "All settings are at their original values") + "</span>" +
+        (changed ? '<button class="sm danger ' + (cfgArmed ? "armed" : "") + '" data-act="cfgall">' + (cfgArmed ? "Confirm reset" : "Reset all") + "</button>" : "") + "</div>" +
+      builtWithHTML() + "</div>";
+    el.scrollTop = keep;   // re-renders must not jump back to the top
+  }
+  function useCfg(c) {   // the Capture tunables take effect at once
+    REQUEST_TIMEOUT_MS = c.requestWait * 1000; KEEP_FRAMES = c.keepFrames; DEBUG_KEEP = c.debugKeep;
+  }
+  const sendCfg = (type, payload) => nativeCall(type, payload || {}, 30000).then((st) => { if (st && st.cfgSchema) { SET = st; useCfg(st.cfg); } renderCfg(); }, (e) => { (window.__aiToast || alert)(e.message); renderCfg(); });
+  function openSettings() {
+    if (cfgIsOpen) return;
+    nativeCall("settings-get", {}, 30000).then((st) => { SET = st; cfgIsOpen = true; renderCfg(); cfgSheet().scrollTop = 0; }, (e) => (window.__aiToast || alert)(e.message));
+  }
+  function closeSettings() { cfgIsOpen = false; cfgArmed = false; renderCfg(); }
+  function cfgClick(e) {
+    e.stopPropagation();   // the sheet's taps never reach the page underneath
+    if (e.target.closest("select, option, input, textarea")) return;
+    const t = e.target.closest("[data-act]"); if (!t || t.disabled) return;
+    const act = t.dataset.act, v = t.dataset.v, k = t.dataset.k;
+    if (act === "cfgclose") return closeSettings();
+    if (act === "look") { const val = k === "textSize" ? +v : v; LOOK[k] = val; applyLook(); renderCfg(); return sendCfg("set", { k: k, v: val }); }
+    if (act === "toggle") { SET.settings[v] = !SET.settings[v]; renderCfg(); return sendCfg("set", { k: v, v: SET.settings[v] }); }
+    if (act === "cfgreset") return sendCfg("cfg", { k: k, reset: 1 });
+    if (act === "cfgstep") { const d = cfgItem(k), step = d.step || 1; SET.cfg[k] = Number(Math.min(d.max, Math.max(d.min, Number(SET.cfg[k]) + step * +v)).toFixed(2)); renderCfg(); return sendCfg("cfg", { k: k, v: SET.cfg[k] }); }
+    if (act === "cfgall") {
+      if (cfgArmed) { cfgArmed = false; return sendCfg("cfg", { k: "*" }); }
+      cfgArmed = true; renderCfg(); setTimeout(() => { if (cfgArmed) { cfgArmed = false; renderCfg(); } }, 3500); return;
+    }
+    if (act === "ai-open") return window.__aiOpen();
+    if (act === "openurl") return nativeCall("openurl", { v: v }, 30000).catch(() => {});
+    if (act === "updcheck") {
+      const um = document.getElementById("updmsg"); t.disabled = true; if (um) um.textContent = "Checking\u2026";
+      return nativeCall("update-check", {}, 30000).then((r) => {
+        t.disabled = false; if (um) um.textContent = r.msg;
+        if (r.available) { closeSettings(); if (window.__showUpdate) window.__showUpdate(r.info); }
+      }, (er) => { t.disabled = false; if (um) um.textContent = er.message; });
+    }
+  }
+  function cfgChange(e) {
+    e.stopPropagation();
+    if (e.target.classList.contains("cfgin")) sendCfg("cfg", { k: e.target.dataset.k, v: e.target.value });
+  }
+  $("cfgOpen").addEventListener("click", openSettings);
+  applyLook();
   $("toggle").addEventListener("click", () => (S.running ? endSession() : startSession()));
   $("mClose").addEventListener("click", () => { $("modal").classList.add("hidden"); showQueuedUpdate(); });
   $("verLine").textContent = "VisionX v" + BOOT.version;

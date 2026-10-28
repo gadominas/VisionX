@@ -18,7 +18,7 @@
    const code = await new Request("https://raw.githubusercontent.com/gadominas/VisionX/main/install.js").loadString();
    await eval("(async () => {" + code + "\n})()");
    ```
-3. Tap **Open VisionX**. Apple Intelligence works straight away. To use Claude or OpenAI, open **Settings › AI settings** and add your own key (typed into a native iOS prompt and kept in the iOS Keychain).
+3. Tap **Open VisionX**. Apple Intelligence works straight away. To use Claude or OpenAI, tap the **sliders icon** at the top, then **AI settings**, and add your own key (typed into a native iOS prompt and kept in the iOS Keychain).
 
 **Update:** run *VisionX Installer* again. Presets, triggers and settings are kept.
 
@@ -36,6 +36,7 @@
 - **Debug log.** The last 10 photos are kept in memory with exactly what was sent (instructions, context, request settings) and what came back, both as received and as understood, plus any trigger checks. JSON is syntax-highlighted, and **Copy as JSON** copies the log without the photos.
 - **Session stats.** At the end you see the duration, photos taken, requests sent, tokens used, and how many times each trigger fired.
 - **Claude, OpenAI or Apple Intelligence.** Pick any model your Claude or OpenAI key can use in **AI settings**, test the connection and see your token usage per day, feature and model. Or use Apple Intelligence through Shortcuts with no API key.
+- **Settings** (sliders icon at the top): colours (Auto or six palettes, VisionX teal in all), layout (Comfortable, Compact, or Tiny: older photos as one line each, tap to expand), text size and headline font, AI settings, update checks, and Capture limits (AI request time limit, photos kept on screen and in Debug) with Reset. Saved in iCloud Drive › Scriptable › VisionX › `settings.json`; presets, triggers and session choices stay in `vision-session.json` on this iPhone. **Built with** links to the [shared blueprints](https://github.com/gadominas/app-blueprints) VisionX follows ([docs/BLUEPRINTS.md](docs/BLUEPRINTS.md)).
 
 ## Use cases
 
@@ -127,7 +128,7 @@ Both shortcut names can be changed in the app.
 
 VisionX checks for a new version each time it opens. When one is out, a sheet shows its three best features, with **Update now** and **Later**. Update now installs the new version over the current one; close and reopen VisionX to start it. Later, or tapping outside the sheet, hides the offer for two days. Your presets, triggers and settings are kept.
 
-The full history is in [CHANGELOG.md](CHANGELOG.md). Versions before 1.7.0 can't update themselves, so run *VisionX Installer* once more to get 1.7.0. To turn update checks off, set `const CHECK_UPDATES = false;` near the top of `VisionX.js`.
+The full history is in [CHANGELOG.md](CHANGELOG.md). Versions before 1.7.0 can't update themselves, so run *VisionX Installer* once more to get 1.7.0. To turn update checks off, switch off **Settings › Updates › Offer new versions**; **Check for updates now** checks at once.
 
 ## Privacy
 
