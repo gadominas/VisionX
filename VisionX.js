@@ -28,7 +28,7 @@ const STORE_FILE = "vision-session.json"; // presets + settings, in Scriptable's
 // ───────── Version and in-app updates ─────────
 // This build's version. When releasing, bump it and add a matching entry to releases.json.
 // Keep these two lines exactly in this form (single quotes): the updater reads them from downloads.
-const VERSION = '1.12.0';
+const VERSION = '1.13.0';
 const APP_ID = 'visionx';   // unique per app, never changes
 const REPO_RAW = 'https://raw.githubusercontent.com/gadominas/VisionX/main/';
 const SCRIPT_FILE = 'VisionX.js';   // the script's file name in the repository
@@ -1092,6 +1092,65 @@ body.d-tiny .older article.open img{order:3;width:100%}
 .heroSummary #summary.md{margin:0}
 .report .bigsum.md{font-size:calc(14px * var(--ts,1))}
 .panelTitle{display:flex;align-items:baseline;gap:6px;margin:0 0 4px;font-size:calc(17px * var(--ts,1))}
+/* Summary right under the photos: small photo, wide summary */
+.hero{grid-template-columns:clamp(84px,26%,128px) minmax(0,1fr);gap:10px;align-items:start;margin-top:10px}
+.hero .finder img{max-height:none;width:100%;aspect-ratio:3/4;object-fit:cover}
+.hero .finder .placeholder{aspect-ratio:3/4;font-size:11px;padding:6px;text-align:center}
+.hero .finder::before,.hero .finder::after,.hero .finder i::before,.hero .finder i::after{width:10px;height:10px;border-width:1.5px}
+.hero .finder::before{top:5px;left:5px}.hero .finder::after{top:5px;right:5px}
+.hero .finder i::before{bottom:5px;left:5px}.hero .finder i::after{bottom:5px;right:5px}
+.hero .tag{left:5px;bottom:5px;font-size:10px;padding:1px 5px}
+.heroSummary{min-height:0}
+.heroSummary .scroll{position:static;overflow:visible;padding:10px 12px}
+/* Analysis progress on the photo being analyzed */
+.nowPhoto.busy::after{display:none}
+.anl{position:absolute;inset:0;pointer-events:none;overflow:hidden}
+.anl::before{content:"";position:absolute;inset:0;background:rgba(0,0,0,.28)}
+.anlScan{position:absolute;left:0;right:0;height:30%;top:-30%;background:linear-gradient(to bottom,transparent,color-mix(in srgb,var(--done) 45%,transparent) 70%,var(--done) 72%,transparent 74%);animation:vxscan 1.6s ease-in-out infinite}
+@keyframes vxscan{0%{top:-30%}100%{top:100%}}
+.anlBox{position:absolute;left:50%;top:46%;transform:translate(-50%,-50%);width:68px;height:68px;display:grid;place-items:center}
+.anlRing{position:absolute;inset:0;width:100%;height:100%;transform:rotate(-90deg)}
+.anlRing circle{fill:none;stroke-width:4}
+.anlRing .trk{stroke:rgba(255,255,255,.28)}
+.anlRing .arc{stroke:var(--done);stroke-linecap:round;transition:stroke-dashoffset .15s linear}
+.anlPct{position:relative;color:#fff;font-weight:800;font-size:15px;text-shadow:0 1px 3px rgba(0,0,0,.7)}
+.anlTxt{position:absolute;left:0;right:0;bottom:0;padding:16px 8px 7px;font-size:11px;font-weight:600;color:#fff;text-align:center;background:linear-gradient(transparent,rgba(0,0,0,.7))}
+.anl.done .anlScan{display:none}
+.anl.done{animation:vxfade .8s ease forwards .45s}
+@keyframes vxfade{to{opacity:0}}
+@media (prefers-reduced-motion:reduce){.anlScan{animation:none;display:none}.anl.done{animation:none;opacity:0}}
+/* Compact trigger status */
+.trigStatus{display:block;margin:12px 0 14px;border:1px solid var(--rule);border-radius:12px;background:var(--surface);overflow:hidden}
+.tr2sum{display:flex;flex-wrap:wrap;gap:2px 12px;padding:8px 12px;font-size:12px;color:var(--graphite);border-bottom:1px solid var(--rule)}
+.tr2sum b{color:var(--ink)}
+.tr2sum .ran b{color:var(--done)}
+.tr2{border-bottom:1px solid var(--rule);transition:box-shadow .3s}
+.tr2:last-child{border-bottom:0}
+.tr2h{display:flex;align-items:center;gap:8px;width:100%;min-height:40px;padding:6px 12px;background:none;border:0;color:var(--ink);font:inherit;font-size:calc(14px * var(--ts,1));text-align:left;cursor:pointer}
+.tr2h:focus-visible{outline:2px solid var(--done);outline-offset:-2px}
+.tr2 .tdot{width:10px;height:10px;margin:0;flex:none;border-radius:50%;background:var(--rule)}
+.tr2n{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}
+.tr2b{flex:none;font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;background:var(--field);color:var(--graphite);white-space:nowrap}
+.tr2c{flex:none;min-width:1.8em;text-align:right;font-weight:800;color:var(--done)}
+.tr2t{flex:none;min-width:4.6em;text-align:right;font-size:11px;color:var(--graphite)}
+.tr2.checking .tdot,.tr2.firing .tdot{background:var(--amber);animation:pulse 1s ease-in-out infinite}
+.tr2.checking .tr2b,.tr2.firing .tr2b{background:color-mix(in srgb,var(--amber) 22%,var(--surface));color:var(--amber)}
+.tr2.fired .tdot,.tr2.met .tdot,.tr2.lit .tdot{background:var(--done)}
+.tr2.fired .tr2b{background:var(--done);color:var(--paper)}
+.tr2.met .tr2b{background:color-mix(in srgb,var(--done) 18%,var(--surface));color:var(--done)}
+.tr2.notmet .tdot{background:var(--graphite)}
+.tr2.error .tdot{background:var(--rec)}
+.tr2.error .tr2b{background:color-mix(in srgb,var(--rec) 18%,var(--surface));color:var(--rec)}
+.tr2.lit{background:color-mix(in srgb,var(--done) 7%,var(--surface))}
+.tr2.flash{box-shadow:inset 4px 0 0 var(--done)}
+.tr2.off{opacity:.6}
+.tr2.off .tdot{background:transparent;border:2px solid var(--rule)}
+.tr2m{display:flex;gap:10px;align-items:flex-start;padding:0 12px 10px 30px;font-size:12px;color:var(--graphite)}
+.tr2m .txt{flex:1;min-width:0}
+.tr2m .txt div+div{margin-top:3px}
+.tr2m .switch{margin:0;flex:none}
+.tr2off{display:block;width:100%;text-align:left;background:none;border:0;border-top:1px solid var(--rule);padding:8px 12px;font:inherit;font-size:12px;color:var(--graphite);cursor:pointer}
+@media (prefers-reduced-motion:reduce){.tr2.checking .tdot,.tr2.firing .tdot{animation:none}}
 /* Layers: modal 10, editor 20, update 30, Settings 50, AI settings 60 (it opens from Settings), toasts 70 */
 #cfgsheet{position:fixed;inset:0;z-index:50;background:var(--paper);color:var(--ink);transform:translateY(102%);visibility:hidden;transition:transform .28s ease,visibility 0s linear .28s;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;text-align:left}
 #cfgsheet.open{transform:none;visibility:visible;transition:transform .28s ease}
@@ -1327,10 +1386,19 @@ body.d-tiny .older article.open img{order:3;width:100%}
       <figcaption id="nowCap">Photo being analyzed</figcaption>
     </figure>
   </div>
-  <section class="frameSum" id="frameSum" aria-live="polite">
-    <div class="fsHead"><b>AI summary of the photo</b><span class="fsMeta num" id="fsMeta"></span></div>
-    <div class="md" id="fsBody"></div>
+  <section class="hero" aria-label="Latest photo and summary">
+    <div id="heroPhoto"></div>
+    <div class="heroSummary" id="heroSummary">
+      <div class="scroll">
+        <h2 id="summaryTitle">Summary so far</h2>
+        <span id="summaryBy" class="badge-ai hidden"></span>
+        <div id="summary" class="md muted" aria-live="polite"></div>
+        <div id="summaryMeta" class="meta num"></div>
+      </div>
+    </div>
   </section>
+  <details id="stateBox" class="tracked hidden"><summary>Tracked details</summary><pre id="state" class="code"></pre></details>
+  <section id="trigStatus" class="trigStatus hidden" aria-label="Triggers" aria-live="polite"></section>
   <div class="zoomRow" id="zoomRow">
     <label for="zoom">Zoom</label>
     <input id="zoom" type="range" min="1" max="5" step="0.1" value="1" aria-describedby="zoomHint">
@@ -1346,21 +1414,6 @@ body.d-tiny .older article.open img{order:3;width:100%}
     <div><b id="sTok">0</b><span>Tokens</span></div>
   </div>
 
-  <section id="trigStatus" class="trigStatus hidden" aria-label="Triggers" aria-live="polite"></section>
-
-  <section class="hero" aria-label="Latest photo and summary">
-    <div id="heroPhoto"></div>
-    <div class="heroSummary" id="heroSummary">
-      <div class="scroll">
-        <h2 id="summaryTitle">Summary so far</h2>
-        <span id="summaryBy" class="badge-ai hidden"></span>
-        <div id="summary" class="md muted" aria-live="polite"></div>
-        <div id="summaryMeta" class="meta num"></div>
-      </div>
-    </div>
-  </section>
-  <div id="latestNote" class="latestNote"></div>
-  <details id="stateBox" class="tracked hidden"><summary>Tracked details</summary><pre id="state" class="code"></pre></details>
 
   <section id="frames"></section>
 
@@ -1496,6 +1549,8 @@ const PAGE_JS = String.raw`
   let editingTrigger = null;
   let shortcutChain = Promise.resolve();
   let queuedUpdate = null;
+  let anlPendingIdx = 0, anlDoneIdx = 0, anlDoneAt = 0;
+  let trigSig = "", trigOpen = {}, trigOffOpen = false;
   const SEND_KINDS = ["summary", "frame", "raw", "parsed", "state", "all", "custom"];
   const SEND_HINTS = {
     summary: "The running summary of the session (in fresh mode: what the latest photo shows).",
@@ -2152,7 +2207,7 @@ const PAGE_JS = String.raw`
     } catch (e) { showError("Camera: " + e.message); return; }
 
     sess.stats.photos++;
-    const frame = { idx: ++sess.seq, img, time: new Date().toLocaleTimeString(), pending: true };
+    const frame = { idx: ++sess.seq, img, time: new Date().toLocaleTimeString(), pending: true, t0: Date.now() };
     sess.frames.unshift(frame);
     if (sess.frames.length > KEEP_FRAMES) sess.frames.length = KEEP_FRAMES; // older photos dropped from memory
     sess.busyIdx = frame.idx;
@@ -2197,7 +2252,7 @@ const PAGE_JS = String.raw`
   }
 
   async function shootApple(sess) {
-    const frame = { idx: ++sess.seq, img: null, time: new Date().toLocaleTimeString(), pending: true };
+    const frame = { idx: ++sess.seq, img: null, time: new Date().toLocaleTimeString(), pending: true, t0: Date.now() };
     sess.frames.unshift(frame);
     if (sess.frames.length > KEEP_FRAMES) sess.frames.length = KEEP_FRAMES;
     sess.busyIdx = frame.idx;
@@ -2713,24 +2768,6 @@ const PAGE_JS = String.raw`
     return html;
   }
 
-  // ── AI summary of the photo (Live tab, under the live and analyzed photos) ──
-  function renderFrameSum() {
-    const done = S.frames.find((f) => !f.pending && (f.text || f.error));
-    const busy = S.frames[0] && S.frames[0].pending ? S.frames[0] : null;
-    const body = $("fsBody"), meta = $("fsMeta");
-    if (!done) {
-      body.innerHTML = '<p class="muted">' + (busy ? "Analyzing photo #" + busy.idx + "\u2026" : "Appears here as soon as the first photo is analyzed.") + "</p>";
-      meta.textContent = "";
-      return;
-    }
-    body.innerHTML = done.error ? '<p class="err">Not analyzed: ' + escHTML(done.error) + "</p>" : md(done.text);
-    const bits = ["Photo #" + done.idx + " at " + done.time];
-    if (S.by) bits.push("by " + S.by);
-    if (done.tokens) bits.push(fmtNum(done.tokens) + " tokens");
-    if (done.ms) bits.push((done.ms / 1000).toFixed(1) + " s");
-    if (busy) bits.push("analyzing #" + busy.idx + "\u2026");
-    meta.textContent = bits.join(", ");
-  }
 
   // ── session controls in the header: Start, Pause/Resume, Stop ──
   function updateControls() {
@@ -2791,6 +2828,141 @@ const PAGE_JS = String.raw`
       (labelled ? " Inside FRAME and SUMMARY, never start a line with FRAME:, SUMMARY:, STATE: or TRIGGERS:." : " Inside JSON strings, write line breaks as \\n.");
   }
 
+  // ── analysis progress on the photo being analyzed ──
+  // Estimated from how long the recent photos took (the AI doesn't report progress).
+  function expectedAnalysisMs() {
+    const hist = (S.debug || []).filter((e) => e.ms && !e.error && !(e.frame && e.frame.pending)).slice(0, 5).map((e) => e.ms).sort((a, b) => a - b);
+    if (hist.length) return Math.max(1500, hist[Math.floor(hist.length / 2)]);
+    return isApple() ? 12000 : 6000;
+  }
+  function analysisProgress(f) {
+    const t = Date.now() - (f.t0 || Date.now()), exp = expectedAnalysisMs();
+    const p = t < exp ? 0.9 * t / exp : 0.9 + 0.09 * (1 - Math.exp(-(t - exp) / exp));
+    const left = Math.ceil((exp - t) / 1000);
+    return { p: p, label: t < exp ? (left <= 1 ? "almost done" : "\u2248 " + left + " s left") : "taking longer than usual\u2026" };
+  }
+  function anlOverlay(done) {
+    const o = el("div", "anl" + (done ? " done" : ""));
+    o.innerHTML = '<div class="anlScan"></div><div class="anlBox"><svg class="anlRing" viewBox="0 0 44 44" aria-hidden="true">' +
+      '<circle class="trk" cx="22" cy="22" r="19"></circle><circle class="arc" cx="22" cy="22" r="19" pathLength="100" stroke-dasharray="100" stroke-dashoffset="' + (done ? 0 : 100) + '"></circle></svg>' +
+      '<span class="anlPct num">' + (done ? "\u2713" : "0%") + '</span></div><div class="anlTxt num">' + (done ? "Analyzed" : "Analyzing\u2026") + "</div>";
+    return o;
+  }
+  function updateAnalysis() {
+    const f = S.frames[0];
+    const o = document.querySelector("#nowPhoto .anl:not(.done)");
+    if (!o || !f || !f.pending) return;
+    const pr = analysisProgress(f);
+    o.querySelector(".arc").setAttribute("stroke-dashoffset", String(Math.round(100 - pr.p * 100)));
+    o.querySelector(".anlPct").textContent = Math.round(pr.p * 100) + "%";
+    o.querySelector(".anlTxt").textContent = (isApple() && !f.img ? "Taking the photo\u2026 " : "Analyzing\u2026 ") + pr.label;
+  }
+  setInterval(() => { if (S.running) updateAnalysis(); }, 150);
+
+  // ── compact trigger status (Live) ──
+  function trigBadge(st) {
+    if (st.off) return "off";
+    return { checking: "checking\u2026", firing: "running\u2026", fired: "ran", met: "met, held", notmet: "not met", error: "problem", waiting: "waiting" }[st.status] || "waiting";
+  }
+  function trigLine(sess, st) {
+    const next = Math.max(0, Math.ceil((st.nextAt - Date.now()) / 1000));
+    let line;
+    switch (st.status) {
+      case "idle": line = !sess.running ? "Not checked." : isMoment() ? "Checked with every photo." : st.t.when === "photo" ? "Checked after each photo." : "First check in " + next + " s."; break;
+      case "waiting": line = "Waiting for the first summary."; break;
+      case "checking": line = "Checking the condition\u2026"; break;
+      case "firing": line = "Condition met. Running \u201C" + st.t.shortcut + "\u201D\u2026"; break;
+      case "notmet": line = "Not met: " + st.reason; break;
+      case "met": line = "Met (" + st.reason.replace(/[.!]+$/, "") + "), not run again: " + (st.t.mode === "once" ? "it runs only the first time." : "it already ran and waits for the condition to turn false." + (isMoment() ? "" : " Choose \u201CEach new occurrence\u201D for repeated events.")); break;
+      case "fired": line = "Ran \u201C" + st.t.shortcut + "\u201D at " + st.firedAt + ": " + st.reason; break;
+      case "error": line = "Problem: " + st.error; break;
+      default: line = "";
+    }
+    line = String(line).trim();
+    if (line && !/[.!?\u2026]$/.test(line)) line += ".";
+    if (st.done) line += " Done for this session.";
+    else if (sess.running && !st.off && !isMoment() && st.t.when !== "photo" && !st.busy && st.status !== "idle" && st.status !== "waiting") line += " Next check in " + next + " s.";
+    return line;
+  }
+  function shortTime(t) { return t ? new Date(t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }) : ""; }
+  function renderTriggerStatus() {
+    const box = $("trigStatus");
+    const sess = S;
+    box.classList.toggle("hidden", !sess.trigOrder.length);
+    if (!sess.trigOrder.length) return;
+    const on = sess.trigOrder.filter((id) => !sess.trig[id].off), off = sess.trigOrder.filter((id) => sess.trig[id].off);
+    const sig = on.join(",") + "|" + off.join(",") + "|" + trigOffOpen;
+    if (sig !== trigSig) {
+      trigSig = sig;
+      box.textContent = "";
+      box.appendChild(el("div", "tr2sum"));
+      const row = (id) => {
+        const st = sess.trig[id];
+        const r = el("div", "tr2");
+        r.dataset.id = id;
+        const h = el("button", "tr2h");
+        h.type = "button";
+        h.append(el("span", "tdot"), el("span", "tr2n", st.t.name), el("span", "tr2b"), el("span", "tr2c num"), el("span", "tr2t num"));
+        const m = el("div", "tr2m" + (trigOpen[id] ? "" : " hidden"));
+        const txt = el("div", "txt");
+        txt.append(el("div", "ln"), el("div", null, "If: " + st.t.condition), el("div", null, "Runs \u201C" + st.t.shortcut + "\u201D, sending " + (SEND_LABELS[st.t.send] || SEND_LABELS.summary) + "."));
+        const sw = makeSwitch(!st.off, "Trigger " + st.t.name + " on", (v) => setTriggerEnabled(id, v));
+        m.append(txt, sw.wrap);
+        h.setAttribute("aria-expanded", trigOpen[id] ? "true" : "false");
+        h.addEventListener("click", () => {
+          trigOpen[id] = !trigOpen[id];
+          m.classList.toggle("hidden", !trigOpen[id]);
+          h.setAttribute("aria-expanded", trigOpen[id] ? "true" : "false");
+        });
+        r.append(h, m);
+        return r;
+      };
+      on.forEach((id) => box.appendChild(row(id)));
+      if (off.length) {
+        const b = el("button", "tr2off", (trigOffOpen ? "\u25BE " : "\u25B8 ") + "Off: " + off.map((id) => sess.trig[id].t.name).join(", "));
+        b.type = "button";
+        b.setAttribute("aria-expanded", trigOffOpen ? "true" : "false");
+        b.addEventListener("click", () => { trigOffOpen = !trigOffOpen; renderTriggerStatus(); });
+        box.appendChild(b);
+        if (trigOffOpen) off.forEach((id) => box.appendChild(row(id)));
+      }
+    }
+    // tally
+    let ran = 0, runs = 0, held = 0, notmet = 0, checking = 0, problems = 0;
+    on.forEach((id) => {
+      const st = sess.trig[id];
+      if (st.fired) { ran++; runs += st.fired; }
+      if (st.status === "met") held++;
+      if (st.status === "notmet") notmet++;
+      if (st.status === "checking" || st.status === "firing") checking++;
+      if (st.status === "error") problems++;
+    });
+    const parts = [];
+    parts.push('<span class="ran"><b>' + ran + "</b> ran" + (runs > ran ? " (" + runs + " runs)" : "") + "</span>");
+    if (checking) parts.push("<span><b>" + checking + "</b> checking</span>");
+    if (held) parts.push("<span><b>" + held + "</b> met, held</span>");
+    parts.push("<span><b>" + notmet + "</b> not met</span>");
+    if (problems) parts.push("<span><b>" + problems + "</b> with a problem</span>");
+    if (off.length) parts.push("<span><b>" + off.length + "</b> off</span>");
+    box.querySelector(".tr2sum").innerHTML = parts.join("");
+    // rows
+    const now = Date.now();
+    box.querySelectorAll(".tr2").forEach((r) => {
+      const st = sess.trig[r.dataset.id];
+      if (!st) return;
+      const cls = ["tr2", st.off ? "off" : st.status];
+      if (st.fired) cls.push("lit");
+      if (st.flashUntil > now) cls.push("flash");
+      r.className = cls.join(" ");
+      r.querySelector(".tr2b").textContent = trigBadge(st);
+      r.querySelector(".tr2c").textContent = st.fired ? st.fired + "\u00D7" : "";
+      r.querySelector(".tr2t").textContent = shortTime(st.status === "fired" ? st.firedTs : st.lastAt);
+      r.querySelector(".ln").textContent = st.off ? "Off." + (st.fired ? " Ran " + st.fired + (st.fired === 1 ? " time" : " times") + " before." : "") : trigLine(sess, st);
+      const input = r.querySelector(".switch input");
+      if (input && input.checked === st.off) input.checked = !st.off;
+    });
+  }
+
   // ── tabs: Setup, Triggers, Live, Sessions ──
   let currentView = "setup";
   function showView(name) {
@@ -2836,6 +3008,11 @@ const PAGE_JS = String.raw`
     }
     box.appendChild(photoView(f));
     box.appendChild(el("span", "nowBadge num", "#" + f.idx + "  " + f.time));
+    if (f.pending) { box.appendChild(anlOverlay(false)); anlPendingIdx = f.idx; updateAnalysis(); }
+    else if (anlPendingIdx === f.idx || (anlDoneIdx === f.idx && Date.now() - anlDoneAt < 1300)) {
+      if (anlPendingIdx === f.idx) { anlDoneIdx = f.idx; anlDoneAt = Date.now(); anlPendingIdx = 0; }
+      box.appendChild(anlOverlay(true));
+    }
     $("nowCap").textContent = f.pending ? "Analyzing photo #" + f.idx + "\u2026"
       : f.error ? "Photo #" + f.idx + " wasn\u2019t analyzed"
       : "Photo #" + f.idx + " analyzed";
@@ -3352,7 +3529,7 @@ const PAGE_JS = String.raw`
       };
       sess.trigOrder.push(t.id);
     });
-    rowEls = {};
+    trigSig = "";
   }
 
   // Turn a trigger on or off. Works any time, including during a session.
@@ -3445,6 +3622,7 @@ const PAGE_JS = String.raw`
   async function applyVerdict(sess, st, verdict) {
     sess.stats.checks++;
     st.checks++;
+    st.lastAt = Date.now();
     st.reason = verdict.reason;
     st.error = "";
     let mode = st.t.mode || "rise";
@@ -3479,6 +3657,7 @@ const PAGE_JS = String.raw`
     sess.stats.fired++;
     st.armed = false;
     st.firedAt = new Date().toLocaleTimeString();
+    st.firedTs = Date.now();
     st.lastRun = { time: st.firedAt, idx: (sess.summaryAt && sess.summaryAt.idx) || sess.seq, reason: verdict.reason, summary: sess.summary };
     st.flashUntil = Date.now() + 2500;
     st.status = "fired";
@@ -3611,58 +3790,6 @@ const PAGE_JS = String.raw`
     return out;
   }
 
-  function renderTriggerStatus() {
-    const box = $("trigStatus");
-    const sess = S;
-    box.classList.toggle("hidden", !sess.trigOrder.length);
-    if (Object.keys(rowEls).length !== sess.trigOrder.length) {
-      box.textContent = "";
-      rowEls = {};
-      sess.trigOrder.forEach((id) => {
-        const st = sess.trig[id];
-        const r = { row: el("div", "trow"), name: el("b", null, st.t.name), sub: el("span", "tsub"), count: el("span", "tcount") };
-        const body = el("div", "tbody");
-        body.append(r.name, r.sub);
-        r.sw = makeSwitch(!st.off, "Trigger " + st.t.name + " on", (on) => setTriggerEnabled(id, on));
-        r.row.append(el("span", "tdot"), body, r.count, r.sw.wrap);
-        r.row.title = st.t.condition;
-        box.appendChild(r.row);
-        rowEls[id] = r;
-      });
-    }
-    const now = Date.now();
-    sess.trigOrder.forEach((id) => {
-      const st = sess.trig[id];
-      const r = rowEls[id];
-      const cls = ["trow", st.off ? "off" : st.status];
-      if (st.fired) cls.push("lit");
-      if (st.flashUntil > now) cls.push("flash");
-      r.row.className = cls.join(" ");
-      const next = Math.max(0, Math.ceil((st.nextAt - now) / 1000));
-      let line;
-      switch (st.status) {
-        case "idle": line = !sess.running ? "Not checked." : isMoment() ? "Checked with every photo. Waiting for the next one." : st.t.when === "photo" ? "Checked after each photo. Waiting for the next one." : "First check in " + next + " s."; break;
-        case "waiting": line = "Waiting for the first summary."; break;
-        case "checking": line = "Checking the condition…"; break;
-        case "firing": line = "Condition met. Running \u201C" + st.t.shortcut + "\u201D…"; break;
-        case "notmet": line = "Not met: " + st.reason; break;
-        case "met": line = "Still met (" + st.reason.replace(/[.!]+$/, "") + "), not run again: " + (st.t.mode === "once" ? "it runs only the first time." : "it already ran and waits for the condition to turn false." + (isMoment() ? "" : " Choose \u201CEach new occurrence\u201D for repeated events.")); break;
-        case "fired": line = "Ran \u201C" + st.t.shortcut + "\u201D at " + st.firedAt + ": " + st.reason; break;
-        case "error": line = "Problem: " + st.error; break;
-        default: line = "";
-      }
-      line = String(line).trim();
-      if (line && !/[.!?…]$/.test(line)) line += ".";
-      if (st.off) line = "Off." + (st.fired ? " Ran " + st.fired + (st.fired === 1 ? " time" : " times") + " before." : "");
-      else if (st.done) line += " Done for this session.";
-      else if (sess.running && !isMoment() && st.t.when !== "photo" && !st.busy && st.status !== "idle" && st.status !== "waiting") line += " Next check in " + next + " s.";
-      r.sub.textContent = line;
-      r.count.textContent = st.fired ? st.fired + "\u00D7" : "";
-      r.count.classList.toggle("hidden", !st.fired);
-      if (r.sw.input.checked === st.off) r.sw.input.checked = !st.off;
-      r.sw.wrap.classList.toggle("hidden", !sess.running);
-    });
-  }
 
   function renderTriggerList() {
     const box = $("trigList");
@@ -4011,17 +4138,14 @@ const PAGE_JS = String.raw`
   function renderFrames() {
     const [latest, ...older] = S.frames;
 
-    // Latest photo, left of the summary
+    // The photo the summary was last updated from, small, left of the summary
     const hp = $("heroPhoto");
     hp.textContent = "";
     const finder = el("div", "finder");
-    if (latest) finder.append(photoView(latest), el("i"), el("span", "tag num", "#" + latest.idx + "  " + latest.time));
-    else finder.append(el("div", "placeholder", S.running ? "First photo coming…" : "No photo yet"), el("i"));
+    const src = (S.summaryAt && S.frames.find((f) => f.idx === S.summaryAt.idx)) || S.frames.find((f) => !f.pending) || null;
+    if (src) finder.append(photoView(src), el("i"), el("span", "tag num", "#" + src.idx));
+    else finder.append(el("div", "placeholder", S.running ? "First photo coming\u2026" : "No photo yet"), el("i"));
     hp.appendChild(finder);
-
-    // What the latest photo itself showed, under the pair
-    $("latestNote").textContent = "";   // the photo's own summary now sits under the Live photos
-    renderFrameSum();
 
     renderNow();
 

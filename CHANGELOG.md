@@ -2,6 +2,23 @@
 
 All notable changes to VisionX. Generated from `releases.json`; edit that file, not this one.
 
+## 1.13.0 (2026-10-28): See the analysis happen
+
+- ⏳ **Analysis progress**: A ring, scan line and time-left estimate on the photo being analyzed.
+- 🧾 **One clear summary**: The summary shows once, right under the photos, next to a small thumbnail.
+- 🚦 **Triggers at a glance**: One line per trigger with a status badge, run count, time and a tally.
+
+**Changes**
+
+- Removed the separate per-photo AI summary card; the summary (with Markdown) now sits right under the live and analyzed photos
+- The summary's photo is a small thumbnail of the photo it was last updated from
+- Photo being analyzed: dimmed overlay, scan line, progress ring with percentage and a time-left estimate from recent photos, then a check mark
+- Compact trigger status: tally line, one line per trigger (badge, run count, last time), tap for details and the on/off switch, off triggers folded into one line
+
+**Fixes**
+
+- The AI summary was shown twice on the Live tab
+
 ## 1.12.0 (2026-10-28): Send your shortcuts everything
 
 - 📨 **Richer trigger input**: Send the photo's summary, the reply as received or understood, or tracked details.
