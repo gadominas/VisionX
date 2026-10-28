@@ -28,7 +28,7 @@ const STORE_FILE = "vision-session.json"; // presets + settings, in Scriptable's
 // ───────── Version and in-app updates ─────────
 // This build's version. When releasing, bump it and add a matching entry to releases.json.
 // Keep these two lines exactly in this form (single quotes): the updater reads them from downloads.
-const VERSION = '1.9.1';
+const VERSION = '1.10.0';
 const APP_ID = 'visionx';   // unique per app, never changes
 const REPO_RAW = 'https://raw.githubusercontent.com/gadominas/VisionX/main/';
 const SCRIPT_FILE = 'VisionX.js';   // the script's file name in the repository
@@ -97,7 +97,8 @@ const CONFIG = [
   ["Capture", [
     { k: "requestWait", label: "Time limit per AI request", help: "A photo whose answer takes longer is marked as not analyzed", unit: "s", def: 90, min: 30, max: 180, step: 10 },
     { k: "keepFrames", label: "Photos kept on screen", help: "The latest photo and the ones before it; older photos leave memory", unit: "photos", def: 3, min: 1, max: 10, step: 1 },
-    { k: "debugKeep", label: "Photos kept in Debug", help: "Kept in memory only and cleared when a session starts", unit: "photos", def: 10, min: 5, max: 30, step: 5 },
+    { k: "debugKeep", label: "Photos kept in Debug", help: "The newest photos with what was sent and what came back; saved with the session when it ends", unit: "photos", def: 10, min: 5, max: 30, step: 5 },
+    { k: "keepSessions", label: "Sessions kept", help: "Finished sessions saved on this iPhone with their photos and debug log; the oldest goes first", unit: "sessions", def: 3, min: 1, max: 10, step: 1 },
   ]],
 ];
 const CFG_FLAT = CONFIG.flatMap(([, items]) => items);
@@ -116,6 +117,55 @@ function setCfg(k, v) {
   if (v === d.def) delete settings.cfg[k]; else settings.cfg[k] = v;   // store only what differs
   return "";
 }
+// ───────── Saved sessions ─────────
+// Each finished session (summary, stats, triggers, photos and debug log) is saved as one JSON
+// file on this iPhone only, never iCloud, because it contains photos. index.json lists them
+// newest first; only the last "Sessions kept" (Settings › Capture) are kept.
+const sesFm = FileManager.local();
+const SES_DIR = sesFm.joinPath(sesFm.documentsDirectory(), "VisionX-sessions");
+const sesPath = (id) => sesFm.joinPath(SES_DIR, String(id).replace(/[^\w-]/g, "") + ".json");
+function sesEnsureDir() { if (!sesFm.fileExists(SES_DIR)) sesFm.createDirectory(SES_DIR, true); }
+function sesIndex() {
+  try {
+    const p = sesFm.joinPath(SES_DIR, "index.json");
+    if (sesFm.fileExists(p)) { const list = JSON.parse(sesFm.readString(p)); if (Array.isArray(list)) return list; }
+  } catch (e) { console.log("Sessions: couldn't read the index: " + e); }
+  return [];
+}
+function sesWriteIndex(list) { sesEnsureDir(); sesFm.writeString(sesFm.joinPath(SES_DIR, "index.json"), JSON.stringify(list)); }
+// Newest first; removes sessions beyond the limit (files too) and entries whose file is gone.
+function sesPrune(list) {
+  const keep = cfg("keepSessions");
+  const sorted = list.filter((m) => m && m.id && sesFm.fileExists(sesPath(m.id))).sort((a, b) => (b.endedAt || 0) - (a.endedAt || 0));
+  sorted.slice(keep).forEach((m) => { try { sesFm.remove(sesPath(m.id)); } catch (e) {} });
+  return sorted.slice(0, keep);
+}
+function sessionList() {
+  const before = sesIndex();
+  const list = sesPrune(before);
+  if (list.length !== before.length) sesWriteIndex(list);
+  return list;
+}
+function sessionSave(rec) {
+  if (!rec || !rec.id || !rec.meta) throw new Error("nothing to save");
+  sesEnsureDir();
+  sesFm.writeString(sesPath(rec.id), JSON.stringify(rec));
+  const list = sesPrune([rec.meta].concat(sesIndex().filter((m) => m && m.id !== rec.id)));
+  sesWriteIndex(list);
+  return list;
+}
+function sessionGet(id) {
+  const p = sesPath(id);
+  if (!sesFm.fileExists(p)) throw new Error("this session is no longer saved");
+  return JSON.parse(sesFm.readString(p));
+}
+function sessionDelete(id) {
+  try { if (sesFm.fileExists(sesPath(id))) sesFm.remove(sesPath(id)); } catch (e) {}
+  const list = sesIndex().filter((m) => m && m.id !== id);
+  sesWriteIndex(list);
+  return sessionList();
+}
+
 // Six palettes on the shared colour tokens. VisionX teal is the accent in all of them;
 // rec (the recording red) is this app's own extra colour.
 const PALETTES = {
@@ -518,6 +568,10 @@ async function handleBridgeCall(wv, ctx, id) {
     else if (msg.type === "save") { writeStore(msg.payload); result = true; }
     // Settings (app-blueprints · settings): each change is applied and saved at once; the answer is the fresh state.
     else if (msg.type === "settings-get") result = settingsState();
+    else if (msg.type === "sessionSave") result = sessionSave(msg.payload);
+    else if (msg.type === "sessionGet") result = sessionGet(msg.payload && msg.payload.id);
+    else if (msg.type === "sessionDelete") result = sessionDelete(msg.payload && msg.payload.id);
+    else if (msg.type === "sessionList") result = sessionList();
     else if (msg.type === "set") {
       const q = msg.payload || {};
       if (!setSetting(q.k, q.v)) throw new Error("That setting can\u2019t be changed here.");
@@ -618,6 +672,7 @@ async function main() {
     store: readStore(),
     look: lookState(),
     cfg: Object.fromEntries(CFG_FLAT.map((d) => [d.k, cfg(d.k)])),
+    sessions: (() => { try { return sessionList(); } catch (e) { return []; } })(),
   };
   const wv = new WebView();
   attachBridge(wv, ctx);
@@ -928,6 +983,64 @@ body.d-tiny .older article.open{flex-wrap:wrap}
 body.d-tiny .older article.open .text{white-space:normal}
 body.d-tiny .older article.open img{order:3;width:100%}
 /* Settings sheet (scoped: the app already uses .switch, .chip and .sheet) */
+/* Tabs: Setup, Live, Sessions */
+.tabs{display:flex;gap:4px;background:var(--field);border-radius:12px;padding:4px;margin:0 0 14px}
+.tabs button{flex:1;height:38px;border:0;border-radius:9px;background:transparent;color:var(--graphite);font:600 calc(14px * var(--ts,1))/1 -apple-system,system-ui,sans-serif;cursor:pointer}
+.tabs button[aria-selected=true]{background:var(--surface);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.14)}
+.tabs button:focus-visible{outline:3px solid var(--done);outline-offset:1px}
+.tabs .recdot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--rec);margin-right:6px;vertical-align:1px;animation:pulse 1.4s ease-in-out infinite}
+.tabs .cnt{font-weight:500;color:var(--graphite);margin-left:4px}
+.startBar .btn{width:100%;margin:4px 0 14px}
+/* Live */
+.liveIdle{text-align:center;padding:36px 8px;color:var(--graphite)}
+.liveIdle .btn{width:100%;margin-top:14px}
+.liveGrid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px}
+.liveGrid figure{margin:0;min-width:0}
+.liveGrid figcaption{font-size:12px;color:var(--graphite);margin-top:6px;min-height:1.4em}
+.livePane .liveWrap,.livePane .liveWrap.aiming{position:relative;width:100%;height:auto;aspect-ratio:3/4;border-radius:14px}
+.liveTag{position:absolute;left:8px;top:8px;display:flex;align-items:center;gap:6px;background:rgba(0,0,0,.55);color:#fff;font-size:12px;font-weight:600;padding:3px 8px;border-radius:999px}
+.liveTag::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--rec);animation:pulse 1.4s ease-in-out infinite}
+.liveApple{aspect-ratio:3/4;border-radius:14px;background:#000;color:#9aa3ae;display:grid;place-items:center;text-align:center;padding:14px;font-size:13px}
+.nowPhoto{position:relative;aspect-ratio:3/4;border-radius:14px;overflow:hidden;background:#000}
+.nowPhoto img{display:block;width:100%;height:100%;object-fit:cover}
+.nowPhoto .placeholder{aspect-ratio:auto;height:100%;padding:10px;text-align:center}
+.nowBadge{position:absolute;left:8px;top:8px;background:rgba(0,0,0,.55);color:#fff;font-size:12px;font-weight:600;padding:3px 8px;border-radius:999px}
+.nowPhoto.busy::after{content:"";position:absolute;inset:0;background:linear-gradient(110deg,transparent 35%,rgba(255,255,255,.22) 50%,transparent 65%);background-size:250% 100%;animation:vxshimmer 1.6s linear infinite}
+@keyframes vxshimmer{from{background-position:150% 0}to{background-position:-100% 0}}
+.countdown{margin:12px 0 10px}
+.cdTop{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.cdText{font:700 calc(19px * var(--ts,1))/1.2 ui-rounded,-apple-system,system-ui,sans-serif}
+.cdSub{font-size:12px;color:var(--graphite);white-space:nowrap}
+.cdBar{height:6px;border-radius:3px;background:var(--field);overflow:hidden;margin-top:8px}
+.cdBar span{display:block;height:100%;width:0;background:var(--done);transition:width .5s linear}
+.cdBar.busy span{width:100%;background:var(--graphite);opacity:.45;animation:pulse 1.2s ease-in-out infinite}
+.endBtn{width:100%;margin:4px 0 14px}
+@media (prefers-reduced-motion:reduce){.nowPhoto.busy::after,.tabs .recdot,.liveTag::before,.cdBar.busy span{animation:none}.cdBar span{transition:none}}
+/* Sessions */
+.sesCard{display:flex;gap:12px;align-items:center;width:100%;text-align:left;padding:10px;margin:0 0 10px;border:1px solid var(--rule);border-radius:14px;background:var(--surface);color:var(--ink);font:inherit;cursor:pointer}
+.sesCard img,.sesCard .noimg{width:64px;height:64px;border-radius:10px;object-fit:cover;flex:none;background:#000}
+.sesCard .t{flex:1;min-width:0}
+.sesCard b{display:block;font-size:15px}
+.sesCard .m{display:block;font-size:12px;color:var(--graphite);margin-top:2px}
+.sesCard .s{font-size:13px;color:var(--graphite);margin-top:4px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.sesEmpty{text-align:center;padding:30px 8px;color:var(--graphite)}
+.report h1{font:700 calc(24px * var(--ts,1))/1.15 ui-rounded,-apple-system,system-ui,sans-serif;margin:10px 0 2px}
+.report h2{font-size:calc(15px * var(--ts,1));margin:20px 0 8px}
+.report .card{background:var(--surface);border:1px solid var(--rule);border-radius:14px;padding:12px 14px}
+.report .bigsum{font-size:calc(16px * var(--ts,1));line-height:1.45;white-space:pre-wrap;margin:0}
+.report .warn{background:color-mix(in srgb,var(--rec) 12%,var(--surface));border-left:4px solid var(--rec);padding:10px 12px;border-radius:8px;margin-top:10px;font-size:14px}
+.rtable{width:100%;border-collapse:collapse}
+.rtable td{padding:7px 0;border-bottom:1px solid var(--rule);font-size:calc(15px * var(--ts,1));vertical-align:top}
+.rtable td+td{text-align:right;padding-left:10px}
+.rtrig{display:flex;gap:10px;align-items:flex-start;padding:10px 0;border-bottom:1px solid var(--rule)}
+.rtrig:last-child{border-bottom:0}
+.rtrig .tbody{flex:1;min-width:0}
+.rphotos{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px}
+.rphotos figure{margin:0}
+.rphotos img,.rphotos .placeholder{display:block;width:100%;aspect-ratio:3/4;object-fit:cover;border-radius:10px;background:#000}
+.rphotos figcaption{font-size:12px;color:var(--graphite);margin-top:4px}
+.rphotos .note{font-size:13px;margin-top:2px}
+.repTop{display:flex;justify-content:space-between;align-items:center;gap:8px}
 /* Layers: modal 10, editor 20, update 30, Settings 50, AI settings 60 (it opens from Settings), toasts 70 */
 #cfgsheet{position:fixed;inset:0;z-index:50;background:var(--paper);color:var(--ink);transform:translateY(102%);visibility:hidden;transition:transform .28s ease,visibility 0s linear .28s;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;text-align:left}
 #cfgsheet.open{transform:none;visibility:visible;transition:transform .28s ease}
@@ -995,6 +1108,15 @@ body.d-tiny .older article.open img{order:3;width:100%}
     </div>
   </div>
 
+  <nav class="tabs" role="tablist" aria-label="VisionX">
+    <button type="button" role="tab" id="tab-setup" aria-controls="view-setup" aria-selected="true">Setup</button>
+    <button type="button" role="tab" id="tab-live" aria-controls="view-live" aria-selected="false" tabindex="-1">Live</button>
+    <button type="button" role="tab" id="tab-sessions" aria-controls="view-sessions" aria-selected="false" tabindex="-1">Sessions</button>
+  </nav>
+
+  <div id="error" class="error hidden"></div>
+
+  <div id="view-setup" class="view" role="tabpanel" aria-labelledby="tab-setup">
   <details class="settings" id="settingsBox" open>
     <summary>What to look for</summary>
     <label for="preset">Preset</label>
@@ -1114,9 +1236,29 @@ body.d-tiny .older article.open img{order:3;width:100%}
     </div>
   </details>
 
-  <div class="control">
-    <div class="liveWrap" id="liveWrap"><video id="live" class="live" playsinline muted autoplay></video></div>
-    <button id="toggle" class="btn">Start session</button>
+  <div class="startBar"><button id="toggle" class="btn">Start session</button></div>
+  </div>
+
+  <div id="view-live" class="view hidden" role="tabpanel" aria-labelledby="tab-live">
+  <div id="liveIdle" class="liveIdle">
+    <p>No session is running.</p>
+    <button type="button" class="btn" id="liveStart">Start session</button>
+  </div>
+  <div id="liveOn" class="hidden">
+  <div class="liveGrid">
+    <figure class="livePane">
+      <div class="liveWrap" id="liveWrap"><video id="live" class="live" playsinline muted autoplay></video><span class="liveTag">Live</span></div>
+      <div class="liveApple hidden" id="liveApple">Shortcuts takes the photos with Apple Intelligence, so there’s no live preview here.</div>
+      <figcaption>Camera</figcaption>
+    </figure>
+    <figure class="nowPane">
+      <div class="nowPhoto" id="nowPhoto"></div>
+      <figcaption id="nowCap">Photo being analyzed</figcaption>
+    </figure>
+  </div>
+  <div class="countdown">
+    <div class="cdTop"><span class="cdText num" id="cdText">Starting…</span><span class="cdSub num" id="cdSub"></span></div>
+    <div class="cdBar" id="cdBar" aria-hidden="true"><span id="cdFill"></span></div>
   </div>
   <div class="zoomRow" id="zoomRow">
     <label for="zoom">Zoom</label>
@@ -1125,6 +1267,7 @@ body.d-tiny .older article.open img{order:3;width:100%}
     <button type="button" class="chip" id="zoomReset">1×</button>
   </div>
   <div class="zoomHint" id="zoomHint">Change it any time, even while capturing. The next photo uses it.</div>
+  <button type="button" class="btn stop endBtn" id="endBtn">End session</button>
 
   <div class="strip num">
     <div><b id="sElapsed">0:00</b><span>Elapsed</span></div>
@@ -1134,8 +1277,6 @@ body.d-tiny .older article.open img{order:3;width:100%}
   </div>
 
   <section id="trigStatus" class="trigStatus hidden" aria-label="Triggers" aria-live="polite"></section>
-
-  <div id="error" class="error hidden"></div>
 
   <section class="hero" aria-label="Latest photo and summary">
     <div id="heroPhoto"></div>
@@ -1155,11 +1296,18 @@ body.d-tiny .older article.open img{order:3;width:100%}
 
   <details class="settings" id="debugBox">
     <summary>Debug <span id="debugCount" class="trigCount"></span></summary>
-    <div class="hint">The last 10 photos, each with exactly what was sent to the model and what came back. Kept in memory only and cleared when a new session starts.</div>
+    <div class="hint">The newest photos, each with exactly what was sent to the model and what came back. Saved with the session when it ends (Sessions tab).</div>
     <div class="presetBar"><button type="button" class="chip" id="debugCopy">Copy as JSON</button></div>
     <div id="debugHint" class="hint" aria-live="polite"></div>
     <div id="debugList" class="dbgList"></div>
   </details>
+  </div>
+  </div>
+
+  <div id="view-sessions" class="view hidden" role="tabpanel" aria-labelledby="tab-sessions">
+    <div id="sesList"></div>
+    <div id="sesDetail" class="report hidden"></div>
+  </div>
 
   <p class="ver" id="verLine"></p>
 
@@ -1245,7 +1393,9 @@ const PAGE_JS = String.raw`
   const BCFG = BOOT.cfg || {};
   let REQUEST_TIMEOUT_MS = (BCFG.requestWait || 90) * 1000;
   let KEEP_FRAMES = BCFG.keepFrames || 3;
-  let DEBUG_KEEP = BCFG.debugKeep || 10; // photos kept in the debug log (memory only)
+  let DEBUG_KEEP = BCFG.debugKeep || 10; // photos kept in the debug log (saved with the session)
+  let KEEP_SESSIONS = BCFG.keepSessions || 3; // finished sessions kept on this iPhone
+  let sessions = Array.isArray(BOOT.sessions) ? BOOT.sessions : [];
   const LS_KEY = "vision-session-store-v2";
   const LS_OLD = "vision-session-settings-v1";
   const PRESET_IDS = ["preset", "pUpdate", "pNew", "pDelete", "pName", "pSave", "pCancel", "iRefine", "iExpand", "applePhotos"];
@@ -1314,6 +1464,7 @@ const PAGE_JS = String.raw`
     document.querySelectorAll(".oa").forEach((n) => n.classList.toggle("hidden", apple));
     $("appleBox").classList.toggle("hidden", !apple);
     $("liveWrap").classList.toggle("hidden", apple);
+    $("liveApple").classList.toggle("hidden", !apple);
     $("zoomRow").classList.toggle("hidden", apple);
     $("zoomHint").classList.toggle("hidden", apple);
     $("checkBox").classList.toggle("hidden", !apple || isMoment());
@@ -1586,6 +1737,7 @@ const PAGE_JS = String.raw`
   }
   function useCfg(c) {   // the Capture tunables take effect at once
     REQUEST_TIMEOUT_MS = c.requestWait * 1000; KEEP_FRAMES = c.keepFrames; DEBUG_KEEP = c.debugKeep;
+    if (c.keepSessions) KEEP_SESSIONS = c.keepSessions;
   }
   const sendCfg = (type, payload) => nativeCall(type, payload || {}, 30000).then((st) => { if (st && st.cfgSchema) { SET = st; useCfg(st.cfg); } renderCfg(); }, (e) => { (window.__aiToast || alert)(e.message); renderCfg(); });
   function openSettings() {
@@ -1624,6 +1776,7 @@ const PAGE_JS = String.raw`
   $("cfgOpen").addEventListener("click", openSettings);
   applyLook();
   $("toggle").addEventListener("click", () => (S.running ? endSession() : startSession()));
+  wireTabs();
   $("mClose").addEventListener("click", () => { $("modal").classList.add("hidden"); showQueuedUpdate(); });
   $("verLine").textContent = "VisionX v" + BOOT.version;
 
@@ -1863,6 +2016,9 @@ const PAGE_JS = String.raw`
     $("settingsBox").open = false;
     setFormDisabled(true);
     updateToggle();
+    showView("live");
+    renderNow();
+    renderCountdown();
     clock = setInterval(tickClock, 500);
     loop(S);
   }
@@ -1884,7 +2040,7 @@ const PAGE_JS = String.raw`
     // Let an aborted in-flight request settle so the stats include it.
     await new Promise((r) => setTimeout(r, 150));
     renderAll();
-    showModal();
+    await finishSession(sess);
   }
 
   async function loop(sess) {
@@ -2261,14 +2417,17 @@ const PAGE_JS = String.raw`
   }
 
   function renderDebug() {
-    const box = $("debugList");
     const list = S.debug || [];
     $("debugCount").textContent = list.length ? list.length + " of " + DEBUG_KEEP : "";
     $("debugCopy").disabled = !list.length;
+    renderDebugList($("debugList"), list, "Start a session to see exactly what is sent to the model and what comes back for each photo.");
+  }
+
+  function renderDebugList(box, list, emptyText) {
     const open = new Set(Array.from(box.querySelectorAll("details.dbg[open]")).map((d) => d.dataset.id));
     box.textContent = "";
     if (!list.length) {
-      box.appendChild(el("div", "hint", "Start a session to see exactly what is sent to the model and what comes back for each photo."));
+      box.appendChild(el("div", "hint", emptyText));
       return;
     }
     list.forEach((e) => {
@@ -2334,10 +2493,10 @@ const PAGE_JS = String.raw`
     });
   }
 
-  function debugExport() {
-    return JSON.stringify((S.debug || []).map((e) => ({
+  function debugExport(entries) {
+    return JSON.stringify((entries || S.debug || []).map((e) => ({
       photo: "#" + e.idx, time: e.time, engine: e.engine, model: e.model, summary_mode: e.mode,
-      image: imageInfo(e.frame.img), seconds: e.ms ? +(e.ms / 1000).toFixed(2) : null,
+      image: imageInfo(e.frame && e.frame.img), seconds: e.ms ? +(e.ms / 1000).toFixed(2) : null,
       attempts: e.attempts, dropped_settings: e.dropped, usage: e.usage,
       request: e.request, reply_raw: e.raw, reply_parsed: e.parsed, error: e.error || undefined, trigger_checks: e.checks,
     })), null, 2);
@@ -2356,6 +2515,298 @@ const PAGE_JS = String.raw`
       }
     });
     renderDebug();
+  }
+
+  // ── tabs: Setup, Live, Sessions ──
+  let currentView = "setup";
+  function showView(name) {
+    currentView = name;
+    ["setup", "live", "sessions"].forEach((v) => {
+      $("view-" + v).classList.toggle("hidden", v !== name);
+      const tab = $("tab-" + v);
+      tab.setAttribute("aria-selected", v === name ? "true" : "false");
+      tab.tabIndex = v === name ? 0 : -1;
+    });
+    window.scrollTo(0, 0);
+  }
+  function renderTabs() {
+    $("tab-live").innerHTML = (S.running ? '<span class="recdot" aria-hidden="true"></span>' : "") + "Live";
+    $("tab-sessions").innerHTML = "Sessions" + (sessions.length ? '<span class="cnt">' + sessions.length + "</span>" : "");
+    $("liveIdle").classList.toggle("hidden", S.running);
+    $("liveOn").classList.toggle("hidden", !S.running);
+  }
+  function wireTabs() {
+    $("tab-setup").addEventListener("click", () => showView("setup"));
+    $("tab-live").addEventListener("click", () => showView("live"));
+    $("tab-sessions").addEventListener("click", () => {
+      showView("sessions");
+      showSessionList();
+      refreshSessions().then(() => { if (currentView === "sessions" && $("sesDetail").classList.contains("hidden")) showSessionList(); });
+    });
+    $("liveStart").addEventListener("click", () => startSession());
+    $("endBtn").addEventListener("click", () => endSession());
+    renderTabs();
+  }
+
+  // ── Live view: the photo being analyzed, and the countdown to the next one ──
+  function renderNow() {
+    const f = S.frames[0];
+    const box = $("nowPhoto");
+    box.textContent = "";
+    box.classList.toggle("busy", !!(f && f.pending));
+    if (!f) {
+      box.appendChild(el("div", "placeholder", S.running ? "First photo coming\u2026" : "No photo yet"));
+      $("nowCap").textContent = "Photo being analyzed";
+      return;
+    }
+    box.appendChild(photoView(f));
+    box.appendChild(el("span", "nowBadge num", "#" + f.idx + "  " + f.time));
+    $("nowCap").textContent = f.pending ? "Analyzing photo #" + f.idx + "\u2026"
+      : f.error ? "Photo #" + f.idx + " wasn\u2019t analyzed"
+      : "Photo #" + f.idx + " analyzed";
+  }
+  function renderCountdown() {
+    if (!S.running) return;
+    const text = $("cdText"), sub = $("cdSub"), bar = $("cdBar"), fill = $("cdFill");
+    let busy = true, width = 100;
+    if (S.busyIdx) { text.textContent = isApple() ? "Taking photo #" + S.busyIdx + " in Shortcuts\u2026" : "Analyzing photo #" + S.busyIdx + "\u2026"; sub.textContent = ""; }
+    else if (S.triggerWaitIdx) { text.textContent = "Running triggers\u2026"; sub.textContent = "for photo #" + S.triggerWaitIdx; }
+    else if (S.nextAt) {
+      const ms = Math.max(0, S.nextAt - Date.now());
+      text.textContent = "Next photo in " + Math.ceil(ms / 1000) + " s";
+      sub.textContent = "every " + cfg.interval + " s";
+      width = Math.max(0, Math.min(100, 100 * (1 - ms / (cfg.interval * 1000))));
+      busy = false;
+    } else { text.textContent = "Taking a photo\u2026"; sub.textContent = ""; }
+    const prev = parseFloat(fill.style.width) || 0;
+    fill.style.transition = width < prev ? "none" : "";
+    fill.style.width = width + "%";
+    bar.classList.toggle("busy", busy);
+  }
+
+  // ── saving a finished session ──
+  function makeThumb(src) {
+    return new Promise((resolve) => {
+      if (!src) return resolve("");
+      const done = (v) => { clearTimeout(timer); resolve(v); };
+      const timer = setTimeout(() => resolve(""), 1000);
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const k = 160 / Math.max(img.width, img.height);
+          const c = document.createElement("canvas");
+          c.width = Math.max(1, Math.round(img.width * k));
+          c.height = Math.max(1, Math.round(img.height * k));
+          c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+          done(c.toDataURL("image/jpeg", 0.7));
+        } catch (e) { done(""); }
+      };
+      img.onerror = () => done("");
+      img.src = src;
+    });
+  }
+
+  async function buildSessionRecord(sess) {
+    const images = {};
+    const frames = sess.frames.map((f) => {
+      if (f.img) images[f.idx] = f.img;
+      const o = Object.assign({}, f);
+      delete o.img; delete o.pending;
+      return o;
+    });
+    const debug = (sess.debug || []).map((e) => {
+      if (e.frame && e.frame.img) images[e.idx] = e.frame.img;
+      const o = Object.assign({}, e);
+      o.noPhoto = !!(e.frame && e.frame.noPhoto);
+      o.pending = !!(e.frame && e.frame.pending);
+      delete o.frame;
+      return o;
+    });
+    const trigs = sess.trigOrder.map((id) => {
+      const st = sess.trig[id];
+      return { name: st.t.name, condition: st.t.condition, shortcut: st.t.shortcut, mode: st.t.mode || "rise", when: st.t.when || "interval",
+        off: !!st.off, fired: st.fired, checks: st.checks, reason: st.reason || "", decision: st.decision || "", error: st.error || "", firedAt: st.firedAt || "" };
+    });
+    const latest = sess.frames.find((f) => f.img);
+    const thumb = await makeThumb(latest && latest.img);
+    const a = activePreset();
+    const engine = isApple() ? "Apple Intelligence" : (sess.by || cloud.name) + " \u2014 " + cloud.model;
+    const id = "s-" + sess.stats.start;
+    const meta = {
+      id: id, startedAt: sess.stats.start, endedAt: sess.stats.end, photos: sess.stats.photos, fired: sess.stats.fired,
+      engine: engine, mode: isMoment() ? "fresh" : "build", preset: a ? a.name : "", thumb: thumb,
+      summary: String(sess.summary || "").slice(0, 200),
+    };
+    return {
+      id: id, version: BOOT.version, startedAt: sess.stats.start, endedAt: sess.stats.end,
+      instructions: cfg.instructions, preset: a ? a.name : "", engine: engine, mode: meta.mode, interval: cfg.interval,
+      summary: sess.summary || "", summaryAt: sess.summaryAt || null, state: sess.state || {},
+      rows: statsRows(sess), triggers: trigs, frames: frames, debug: debug, images: images, meta: meta,
+    };
+  }
+
+  function collapseAll() {
+    document.querySelectorAll("details[open]").forEach((d) => { d.open = false; });
+    $("trigForm").classList.add("hidden");
+    if (!$("editor").classList.contains("hidden")) closeEditor(false);
+  }
+
+  async function finishSession(sess) {
+    collapseAll();
+    setStatus("Saving the session\u2026");
+    let rec = null;
+    try { rec = await buildSessionRecord(sess); } catch (e) { showError("Couldn\u2019t prepare the session for saving: " + e.message); }
+    if (rec) {
+      try { sessions = (await nativeCall("sessionSave", rec, 60000)) || sessions; rec.saved = true; }
+      catch (e) { rec.saved = false; rec.saveError = e.message; }
+    }
+    setStatus("Session ended");
+    renderTabs();
+    showView("sessions");
+    if (rec) showSessionDetail(rec); else showSessionList();
+    setTimeout(showQueuedUpdate, 1500);
+  }
+
+  // ── Sessions view ──
+  async function refreshSessions() {
+    try { const list = await nativeCall("sessionList", {}, 20000); if (Array.isArray(list)) sessions = list; } catch (_) {}
+    renderTabs();
+  }
+  function fmtDay(t) { return new Date(t).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" }); }
+  function fmtClock(t) { return new Date(t).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" }); }
+
+  function showSessionList() {
+    $("sesDetail").classList.add("hidden");
+    const box = $("sesList");
+    box.classList.remove("hidden");
+    box.textContent = "";
+    box.appendChild(el("div", "hint", "Finished sessions are saved on this iPhone with their photos, summary and debug log. VisionX keeps the last " + KEEP_SESSIONS + " (Settings \u203A Capture)."));
+    if (!sessions.length) { box.appendChild(el("div", "sesEmpty", "No saved sessions yet. They appear here when you end a session.")); return; }
+    const wrap = el("div");
+    wrap.style.marginTop = "12px";
+    sessions.forEach((m) => {
+      const b = el("button", "sesCard");
+      b.type = "button";
+      if (m.thumb) { const i = new Image(); i.src = m.thumb; i.alt = ""; b.appendChild(i); } else b.appendChild(el("span", "noimg"));
+      const t = el("span", "t");
+      t.append(
+        el("b", null, fmtDay(m.startedAt) + ", " + fmtClock(m.startedAt)),
+        el("span", "m", [fmtDur(m.endedAt - m.startedAt), m.photos + (m.photos === 1 ? " photo" : " photos"), m.fired ? m.fired + " trigger run" + (m.fired === 1 ? "" : "s") : "", m.preset].filter(Boolean).join(", ")),
+        el("span", "s", m.summary || "No photo was analyzed."));
+      b.appendChild(t);
+      b.addEventListener("click", () => openSession(m.id));
+      wrap.appendChild(b);
+    });
+    box.appendChild(wrap);
+  }
+
+  async function openSession(id) {
+    try { const rec = await nativeCall("sessionGet", { id: id }, 30000); rec.saved = true; showSessionDetail(rec); }
+    catch (e) { showError("Couldn\u2019t open the session: " + e.message); }
+  }
+
+  function showSessionDetail(rec) {
+    $("sesList").classList.add("hidden");
+    const box = $("sesDetail");
+    box.classList.remove("hidden");
+    box.textContent = "";
+    const imgs = rec.images || {};
+    const top = el("div", "repTop");
+    const back = el("button", "chip", "\u2039 All sessions");
+    back.type = "button";
+    back.addEventListener("click", showSessionList);
+    top.appendChild(back);
+    box.appendChild(top);
+    box.appendChild(el("h1", null, "Session, " + fmtDay(rec.startedAt)));
+    box.appendChild(el("div", "hint", fmtClock(rec.startedAt) + " to " + fmtClock(rec.endedAt) + " (" + fmtDur(rec.endedAt - rec.startedAt) + ")" + (rec.preset ? ", preset \u201C" + rec.preset + "\u201D" : "")));
+    if (rec.saved === false) box.appendChild(el("div", "warn", "This session couldn\u2019t be saved, so it won\u2019t be here after you close VisionX: " + (rec.saveError || "unknown error") + "."));
+
+    box.appendChild(el("h2", null, rec.mode === "fresh" ? "Last moment" : "What happened"));
+    const sc = el("div", "card");
+    sc.appendChild(el("p", "bigsum", rec.summary || "No photo was analyzed in this session."));
+    if (rec.summaryAt) sc.appendChild(el("div", "meta num", (rec.mode === "fresh" ? "From photo #" : "Summary after photo #") + rec.summaryAt.idx + " at " + rec.summaryAt.time + ", " + (rec.mode === "fresh" ? "fresh for each photo" : "built up over the session") + "."));
+    box.appendChild(sc);
+
+    box.appendChild(el("h2", null, "Session stats"));
+    const tc = el("div", "card");
+    const tb = el("table", "rtable num");
+    (rec.rows || []).forEach(([k, v]) => { const tr = el("tr"); tr.append(el("td", null, k), el("td", null, String(v))); tb.appendChild(tr); });
+    tc.appendChild(tb);
+    box.appendChild(tc);
+
+    if ((rec.triggers || []).length) {
+      box.appendChild(el("h2", null, "Triggers"));
+      const c = el("div", "card");
+      rec.triggers.forEach((t) => {
+        const row = el("div", "rtrig");
+        const body = el("div", "tbody");
+        const last = t.error ? "Problem: " + t.error : t.decision || (t.reason ? "Last check: " + t.reason : "Not checked.");
+        body.append(el("b", null, t.name), el("span", "tsub", t.condition), el("span", "tsub", (t.off ? "Off at the end. " : "") + "Ran \u201C" + t.shortcut + "\u201D " + t.fired + (t.fired === 1 ? " time" : " times") + " in " + t.checks + (t.checks === 1 ? " check. " : " checks. ") + last));
+        row.append(body, el("span", "tcount", t.fired ? t.fired + "\u00D7" : ""));
+        c.appendChild(row);
+      });
+      box.appendChild(c);
+    }
+
+    const frames = rec.frames || [];
+    box.appendChild(el("h2", null, "Last " + (frames.length === 1 ? "photo" : frames.length + " photos")));
+    if (!frames.length) box.appendChild(el("div", "hint", "No photos were taken."));
+    else {
+      const grid = el("div", "rphotos");
+      frames.forEach((f) => {
+        const fig = el("figure");
+        fig.appendChild(photoView(Object.assign({}, f, { img: imgs[f.idx], pending: false })));
+        fig.appendChild(el("figcaption", "num", "#" + f.idx + " at " + f.time));
+        fig.appendChild(el("div", "note" + (f.error ? " err" : ""), f.error ? "Not analyzed: " + f.error : f.text || ""));
+        grid.appendChild(fig);
+      });
+      box.appendChild(grid);
+    }
+
+    if (rec.state && Object.keys(rec.state).length) {
+      const d = el("details", "tracked");
+      d.appendChild(el("summary", null, "Tracked details"));
+      d.appendChild(codeBlock(highlightJSON(JSON.stringify(rec.state, null, 2))));
+      box.appendChild(d);
+    }
+    const ins = el("details", "tracked");
+    ins.appendChild(el("summary", null, "Instructions used"));
+    ins.appendChild(codeBlock(escHTML(rec.instructions || "")));
+    ins.appendChild(el("div", "hint", "Analyzed with " + rec.engine + ", a photo every " + rec.interval + " s."));
+    box.appendChild(ins);
+
+    const entries = (rec.debug || []).map((e) => Object.assign({}, e, { frame: { img: imgs[e.idx], pending: !!e.pending, noPhoto: !!e.noPhoto } }));
+    box.appendChild(el("h2", null, "Debug (" + entries.length + (entries.length === 1 ? " photo)" : " photos)")));
+    const dbgBar = el("div", "presetBar");
+    const copy = el("button", "chip", "Copy as JSON");
+    copy.type = "button";
+    const copyHint = el("div", "hint");
+    copy.addEventListener("click", async () => {
+      try { await nativeCall("copy", { text: debugExport(entries) }, 10000); copyHint.textContent = "Copied " + entries.length + " entries as JSON (without the photos)."; }
+      catch (e) { copyHint.textContent = "Couldn\u2019t copy: " + e.message; }
+    });
+    dbgBar.appendChild(copy);
+    box.append(dbgBar, copyHint);
+    const list = el("div", "dbgList");
+    box.appendChild(list);
+    renderDebugList(list, entries, "No debug entries were kept.");
+
+    if (rec.saved) {
+      const del = el("button", "chip danger", "Delete this session");
+      del.type = "button";
+      del.style.marginTop = "22px";
+      del.addEventListener("click", async () => {
+        if (!del.dataset.armed) {
+          del.dataset.armed = "1"; del.classList.add("armed"); del.textContent = "Tap again to delete";
+          setTimeout(() => { delete del.dataset.armed; del.classList.remove("armed"); del.textContent = "Delete this session"; }, 3000);
+          return;
+        }
+        try { sessions = (await nativeCall("sessionDelete", { id: rec.id }, 20000)) || []; renderTabs(); showSessionList(); }
+        catch (e) { showError("Couldn\u2019t delete the session: " + e.message); }
+      });
+      box.appendChild(del);
+    }
+    window.scrollTo(0, 0);
   }
 
   // ── in-app update sheet ──
@@ -3176,6 +3627,7 @@ const PAGE_JS = String.raw`
     if (S.busyIdx) setStatus((isApple() ? "Running the shortcut for photo #" : "Analyzing photo #") + S.busyIdx + "…");
     else if (S.triggerWaitIdx) setStatus("Running triggers for photo #" + S.triggerWaitIdx + "…");
     else if (S.nextAt) setStatus("Next photo in " + Math.max(0, Math.ceil((S.nextAt - Date.now()) / 1000)) + " s");
+    renderCountdown();
   }
 
   // ── rendering ──
@@ -3234,6 +3686,8 @@ const PAGE_JS = String.raw`
     note.textContent = "";
     if (latest) noteParts(latest, true).forEach((n) => note.appendChild(n));
 
+    renderNow();
+
     // The two photos before it
     const box = $("frames");
     box.textContent = "";
@@ -3272,6 +3726,43 @@ const PAGE_JS = String.raw`
     if (f.ms) bits.push((f.ms / 1000).toFixed(1) + " s");
     if (bits.length) out.push(el("div", "meta num", bits.join(", ")));
     return out;
+  }
+
+  // The stats table for a session (saved with it, and shown in its report).
+  function statsRows(sess) {
+    const st = sess.stats;
+    const rows = [
+      ["Duration", fmtDur(st.end - st.start)],
+      ["Photos taken", st.photos],
+      ["Requests sent", st.requests],
+      ["Analyzed", st.ok],
+      ["Failed", st.failed],
+    ];
+    if (st.cancelled) rows.push(["Cancelled at end", st.cancelled]);
+    if (isApple()) {
+      rows.push(["Tokens", "Not reported by Apple"]);
+    } else {
+      rows.push(
+        ["Input tokens", fmtNum(st.prompt)],
+        ["Output tokens", fmtNum(st.completion)],
+        ["Total tokens", fmtNum(st.total)],
+        ["Average tokens per request", st.ok ? fmtNum(Math.round(st.total / st.ok)) : "–"]
+      );
+    }
+    if (sess.trigOrder.length) {
+      rows.push(["Trigger checks", st.checks], ["Triggers fired", st.fired]);
+      sess.trigOrder.forEach((id) => {
+        const t = sess.trig[id];
+        rows.push(["\u201C" + t.t.name + "\u201D ran", t.fired + (t.fired === 1 ? " time" : " times") + (t.off ? " (off at the end)" : "")]);
+      });
+    }
+    rows.push(
+      ["Average response time", st.ok ? (st.latency / st.ok / 1000).toFixed(1) + " s" : "–"],
+      ["Analyzed with", isApple() ? "Apple Intelligence (" + cfg.shortcut + ")" : (sess.by || cloud.name) + " — " + cloud.model],
+      ["Interval", cfg.interval + " s"],
+      ["Summary", isMoment() ? "Fresh for each photo" : "Built up over the session"]
+    );
+    return rows;
   }
 
   function showModal() {
@@ -3324,6 +3815,7 @@ const PAGE_JS = String.raw`
     b.textContent = S.running ? "End session" : "Start session";
     b.classList.toggle("stop", S.running);
     $("statusBox").classList.toggle("running", S.running);
+    renderTabs();
   }
   function setStatus(t) { $("status").textContent = t; }
   function showError(msg) { const e = $("error"); e.textContent = msg; e.classList.remove("hidden"); }

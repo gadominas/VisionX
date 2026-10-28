@@ -2,6 +2,20 @@
 
 All notable changes to VisionX. Generated from `releases.json`; edit that file, not this one.
 
+## 1.10.0 (2026-10-28): Watch it live, keep every session
+
+- 🔴 **Live session tab**: See the live camera, the photo being analyzed and a countdown to the next one.
+- 🗂️ **Sessions are saved**: Each finished session keeps its summary, photos, triggers and debug log.
+- 📋 **Report when you stop**: End session opens a full report of everything that happened.
+
+**Changes**
+
+- Tabs: Setup, Live and Sessions
+- Live: live camera, the photo being analyzed, countdown and progress bar, zoom and End session
+- Ending a session collapses the page, saves the session and opens its report in Sessions
+- Saved session report: what happened, stats, triggers, last photos, tracked details, instructions and the debug log (Copy as JSON, Delete)
+- Settings › Capture: Sessions kept, 3 by default, up to 10; sessions are stored on this iPhone only
+
 ## 1.9.1 (2026-10-28): AI settings opens on top
 
 - 🧭 **AI settings in view**: Tapping AI settings in Settings now opens it in front, not hidden behind.

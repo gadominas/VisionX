@@ -4,6 +4,36 @@
   "script": "VisionX.js",
   "releases": [
     {
+      "version": "1.10.0",
+      "date": "2026-10-28",
+      "title": "Watch it live, keep every session",
+      "highlights": [
+        {
+          "icon": "🔴",
+          "title": "Live session tab",
+          "text": "See the live camera, the photo being analyzed and a countdown to the next one."
+        },
+        {
+          "icon": "🗂️",
+          "title": "Sessions are saved",
+          "text": "Each finished session keeps its summary, photos, triggers and debug log."
+        },
+        {
+          "icon": "📋",
+          "title": "Report when you stop",
+          "text": "End session opens a full report of everything that happened."
+        }
+      ],
+      "changes": [
+        "Tabs: Setup, Live and Sessions",
+        "Live: live camera, the photo being analyzed, countdown and progress bar, zoom and End session",
+        "Ending a session collapses the page, saves the session and opens its report in Sessions",
+        "Saved session report: what happened, stats, triggers, last photos, tracked details, instructions and the debug log (Copy as JSON, Delete)",
+        "Settings › Capture: Sessions kept, 3 by default, up to 10; sessions are stored on this iPhone only"
+      ],
+      "fixes": []
+    },
+    {
       "version": "1.9.1",
       "date": "2026-10-28",
       "title": "AI settings opens on top",

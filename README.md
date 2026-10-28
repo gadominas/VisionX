@@ -8,6 +8,10 @@
   <img src="docs/screenshots/triggers.png" width="200" alt="Editing a trigger that runs a shortcut">
   <img src="docs/screenshots/editor.png" width="200" alt="The expanded instructions editor with an AI-refined suggestion">
 </p>
+<p align="center">
+  <img src="docs/screenshots/live.png" width="260" alt="Live tab: live camera, the photo being analyzed, countdown to the next photo, zoom and End session">
+  <img src="docs/screenshots/report.png" width="260" alt="A saved session's report: what happened and the session stats">
+</p>
 <p align="center"><sub>A known plate is read and the "Open Gate" shortcut runs · counting vehicles and plates over a session · setting up triggers · refining instructions with AI.<br>Screenshots of the app's real interface, rendered with a drawn test scene in place of the camera.</sub></p>
 
 ## Install
@@ -30,10 +34,11 @@
 - **Zoom while capturing.** Slide from 1× to 5× at any time, even mid-session; the next photo uses it. VisionX uses the camera's own zoom when iOS offers it and crops for anything beyond that.
 - **Your instructions.** It does whatever you describe, such as "Count the different people and summarize them" or "Read the license plate of any car at the gate". Save instructions you like as presets.
 - **Full-screen editor with AI refine.** Expand the instructions into a full-screen editor. **Refine with AI** rewrites them so the model knows exactly what to look for, count and ignore. Pick Clearer, More specific or Shorter, or say what should change, then use the suggestion or keep your own.
-- **Latest photo next to the summary.** The newest photo is large, with the summary beside it. The two photos before it are shown smaller, and that's all: photos are never saved.
+- **Live tab.** Starting a session opens Live: the live camera, the photo being analyzed right now, a countdown to the next photo, zoom, and End session. Below it, the newest photo sits next to the running summary.
+- **Saved sessions.** Ending a session saves it on this iPhone with its summary, stats, trigger results, last photos and debug log, and opens its report in the Sessions tab. The last 3 are kept by default, up to 10 (Settings › Capture).
 - **Two summary modes.** Each photo can build on one running summary for the whole session, or be judged fresh on its own (see [Modes](#modes)).
 - **Triggers.** A trigger has a plain-language condition, such as "A car with plate KXA 482 is at the gate", and a shortcut to run. When the model says the condition is met, the shortcut runs and receives the capture summary or your own message. Live rows show which triggers are waiting, checking or have fired, and each one can be switched on or off at any time.
-- **Debug log.** The last 10 photos are kept in memory with exactly what was sent (instructions, context, request settings) and what came back, both as received and as understood, plus any trigger checks. JSON is syntax-highlighted, and **Copy as JSON** copies the log without the photos.
+- **Debug log.** The last 10 photos are kept with exactly what was sent (instructions, context, request settings) and what came back, both as received and as understood, plus any trigger checks. JSON is syntax-highlighted, and **Copy as JSON** copies the log without the photos.
 - **Session stats.** At the end you see the duration, photos taken, requests sent, tokens used, and how many times each trigger fired.
 - **Claude, OpenAI or Apple Intelligence.** Pick any model your Claude or OpenAI key can use in **AI settings**, test the connection and see your token usage per day, feature and model. Or use Apple Intelligence through Shortcuts with no API key.
 - **Settings** (sliders icon at the top): colours (Auto or six palettes, VisionX teal in all), layout (Comfortable, Compact, or Tiny: older photos as one line each, tap to expand), text size and headline font, AI settings, update checks, and Capture limits (AI request time limit, photos kept on screen and in Debug) with Reset. Saved in iCloud Drive › Scriptable › VisionX › `settings.json`; presets, triggers and session choices stay in `vision-session.json` on this iPhone. **Built with** links to the [shared blueprints](https://github.com/gadominas/app-blueprints) VisionX follows ([docs/BLUEPRINTS.md](docs/BLUEPRINTS.md)).
@@ -132,7 +137,8 @@ The full history is in [CHANGELOG.md](CHANGELOG.md). Versions before 1.7.0 can't
 
 ## Privacy
 
-- Photos are kept in memory only: the last three on screen and the last ten in the debug log. They are never written to disk or Photos, and they're cleared when a new session starts.
+- During a session, photos are kept in memory: the last three on screen and the last ten in the debug log.
+- When a session ends, it is saved with those photos in Scriptable's local Documents folder (`VisionX-sessions`) on this iPhone only, never iCloud or Photos. Only the last 3 sessions are kept (up to 10, set in Settings › Capture); older ones are deleted, and you can delete any session from its report.
 - Each photo is sent to the model you choose: Claude, OpenAI or Apple's Private Cloud Compute.
 - Claude and OpenAI keys stay in the iOS Keychain and are only sent to their own provider. The app's page never receives them.
 - Presets, triggers and settings are saved in Scriptable's local Documents folder as `vision-session.json`.
