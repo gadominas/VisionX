@@ -2,6 +2,17 @@
 
 All notable changes to VisionX. Generated from `releases.json`; edit that file, not this one.
 
+## 1.9.1 (2026-10-28): AI settings opens on top
+
+- 🧭 **AI settings in view**: Tapping AI settings in Settings now opens it in front, not hidden behind.
+- ↩️ **Back to Settings**: Done in AI settings brings you straight back to Settings.
+- 💬 **Messages you can see**: Confirmations like Connection OK now show above Settings too.
+
+**Fixes**
+
+- AI settings opened behind the Settings sheet and only appeared after closing Settings
+- Short confirmation messages were hidden behind the Settings and AI settings sheets
+
 ## 1.9.0 (2026-10-28): Settings, your way
 
 - 🎨 **Colours and layout**: Six palettes or Auto, plus Compact and a Tiny layout that puts older photos on one line.

@@ -28,7 +28,7 @@ const STORE_FILE = "vision-session.json"; // presets + settings, in Scriptable's
 // ───────── Version and in-app updates ─────────
 // This build's version. When releasing, bump it and add a matching entry to releases.json.
 // Keep these two lines exactly in this form (single quotes): the updater reads them from downloads.
-const VERSION = '1.9.0';
+const VERSION = '1.9.1';
 const APP_ID = 'visionx';   // unique per app, never changes
 const REPO_RAW = 'https://raw.githubusercontent.com/gadominas/VisionX/main/';
 const SCRIPT_FILE = 'VisionX.js';   // the script's file name in the repository
@@ -845,7 +845,7 @@ details.dbg{border:1px solid var(--rule);border-radius:10px;background:var(--sur
 details.dbgCheck{margin-top:10px;border-top:1px solid var(--rule);padding-top:6px}
 details.dbgCheck>summary{font-size:calc(13px * var(--ts));cursor:pointer}
 #aisheet{--ai-paper:var(--paper);--ai-sheet:var(--surface);--ai-rule:var(--rule);--ai-ink:var(--ink);--ai-muted:var(--graphite);--ai-signal:var(--done);--ai-wash:color-mix(in srgb,var(--ai-signal) 14%,transparent);--ai-danger:var(--rec);
-  position:fixed;inset:0;z-index:40;background:var(--ai-paper);color:var(--ai-ink);transform:translateY(102%);visibility:hidden;transition:transform .28s ease,visibility 0s linear .28s;overflow-y:auto;-webkit-overflow-scrolling:touch;font:calc(15px * var(--ts))/1.4 -apple-system,system-ui,sans-serif;text-align:left}
+  position:fixed;inset:0;z-index:60;background:var(--ai-paper);color:var(--ai-ink);transform:translateY(102%);visibility:hidden;transition:transform .28s ease,visibility 0s linear .28s;overflow-y:auto;-webkit-overflow-scrolling:touch;font:calc(15px * var(--ts))/1.4 -apple-system,system-ui,sans-serif;text-align:left}
 #aisheet.open{transform:none;visibility:visible;transition:transform .28s ease}
 #aisheet *{box-sizing:border-box}
 #aisheet button{font:inherit;color:inherit;background:none;border:0;margin:0;padding:0;cursor:pointer;-webkit-appearance:none;appearance:none;touch-action:manipulation}
@@ -886,7 +886,7 @@ details.dbgCheck>summary{font-size:calc(13px * var(--ts));cursor:pointer}
 #aisheet .utab th{text-align:left;font-weight:600;color:var(--ai-muted);padding:4px 4px 4px 0;border-bottom:1px solid var(--ai-rule)}
 #aisheet .utab td{padding:6px 4px 6px 0;border-bottom:1px solid var(--ai-rule);word-break:break-word}
 #aisheet .utab th:not(:first-child),#aisheet .utab td:not(:first-child){text-align:right;white-space:nowrap}
-#aitoast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom,0px));z-index:41;transform:translate(-50%,20px);opacity:0;visibility:hidden;max-width:90vw;padding:10px 16px;border-radius:18px;background:var(--ink);color:var(--paper);font:calc(14px * var(--ts))/1.35 -apple-system,system-ui,sans-serif;text-align:center;pointer-events:none;transition:transform .25s,opacity .25s,visibility 0s linear .25s}
+#aitoast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom,0px));z-index:70;transform:translate(-50%,20px);opacity:0;visibility:hidden;max-width:90vw;padding:10px 16px;border-radius:18px;background:var(--ink);color:var(--paper);font:calc(14px * var(--ts))/1.35 -apple-system,system-ui,sans-serif;text-align:center;pointer-events:none;transition:transform .25s,opacity .25s,visibility 0s linear .25s}
 #aitoast.on{transform:translate(-50%,0);opacity:1;visibility:visible;transition:transform .25s,opacity .25s}
 .badge-ai{display:inline-block;font-size:calc(12px * var(--ts));font-weight:700;color:var(--done);background:color-mix(in srgb,var(--done) 14%,transparent);border-radius:6px;padding:2px 8px}
 .badge-ex{display:inline-block;font-size:calc(12px * var(--ts));font-weight:600;color:var(--graphite);border:1px dashed var(--graphite);border-radius:6px;padding:1px 8px}
@@ -928,6 +928,7 @@ body.d-tiny .older article.open{flex-wrap:wrap}
 body.d-tiny .older article.open .text{white-space:normal}
 body.d-tiny .older article.open img{order:3;width:100%}
 /* Settings sheet (scoped: the app already uses .switch, .chip and .sheet) */
+/* Layers: modal 10, editor 20, update 30, Settings 50, AI settings 60 (it opens from Settings), toasts 70 */
 #cfgsheet{position:fixed;inset:0;z-index:50;background:var(--paper);color:var(--ink);transform:translateY(102%);visibility:hidden;transition:transform .28s ease,visibility 0s linear .28s;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;text-align:left}
 #cfgsheet.open{transform:none;visibility:visible;transition:transform .28s ease}
 #cfgsheet button{font:inherit;color:inherit;background:none;border:0;border-radius:0;padding:0;font-weight:inherit;cursor:pointer;text-align:inherit}

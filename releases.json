@@ -4,6 +4,33 @@
   "script": "VisionX.js",
   "releases": [
     {
+      "version": "1.9.1",
+      "date": "2026-10-28",
+      "title": "AI settings opens on top",
+      "highlights": [
+        {
+          "icon": "🧭",
+          "title": "AI settings in view",
+          "text": "Tapping AI settings in Settings now opens it in front, not hidden behind."
+        },
+        {
+          "icon": "↩️",
+          "title": "Back to Settings",
+          "text": "Done in AI settings brings you straight back to Settings."
+        },
+        {
+          "icon": "💬",
+          "title": "Messages you can see",
+          "text": "Confirmations like Connection OK now show above Settings too."
+        }
+      ],
+      "changes": [],
+      "fixes": [
+        "AI settings opened behind the Settings sheet and only appeared after closing Settings",
+        "Short confirmation messages were hidden behind the Settings and AI settings sheets"
+      ]
+    },
+    {
       "version": "1.9.0",
       "date": "2026-10-28",
       "title": "Settings, your way",
