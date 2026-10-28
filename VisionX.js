@@ -28,7 +28,7 @@ const STORE_FILE = "vision-session.json"; // presets + settings, in Scriptable's
 // ───────── Version and in-app updates ─────────
 // This build's version. When releasing, bump it and add a matching entry to releases.json.
 // Keep these two lines exactly in this form (single quotes): the updater reads them from downloads.
-const VERSION = '1.11.0';
+const VERSION = '1.12.0';
 const APP_ID = 'visionx';   // unique per app, never changes
 const REPO_RAW = 'https://raw.githubusercontent.com/gadominas/VisionX/main/';
 const SCRIPT_FILE = 'VisionX.js';   // the script's file name in the repository
@@ -1271,13 +1271,23 @@ body.d-tiny .older article.open img{order:3;width:100%}
       <label for="tSend">Send to the shortcut</label>
       <select id="tSend">
         <option value="summary">The capture summary</option>
+        <option value="frame">The photo’s AI summary</option>
+        <option value="raw">The reply as received</option>
+        <option value="parsed">The reply as understood (JSON)</option>
+        <option value="state">Tracked details (JSON)</option>
+        <option value="all">Everything (JSON)</option>
         <option value="custom">A custom message</option>
       </select>
+      <div class="hint" id="tSendHint"></div>
       <div id="tMsgBox" class="hidden">
         <label for="tMsg">Message</label>
-        <textarea id="tMsg" rows="2" placeholder="Gate opened for {reason} at {time}"></textarea>
-        <div class="hint">Optional placeholders, filled in when the trigger runs: {summary} the capture summary, {reason} why the condition was met, {name} the trigger's name, {time} the time.</div>
+        <textarea id="tMsg" rows="3" placeholder="Gate opened for {reason} at {time}. Plate read: {frame}"></textarea>
+        <div class="hint">Placeholders, filled in when the trigger runs:
+          <b>{summary}</b> capture summary, <b>{frame}</b> the photo’s AI summary, <b>{raw}</b> reply as received, <b>{parsed}</b> reply as understood (JSON), <b>{state}</b> tracked details (JSON), <b>{all}</b> everything (JSON),
+          <b>{reason}</b> why the condition was met, <b>{condition}</b>, <b>{check}</b> the trigger check’s own reply, <b>{name}</b> trigger name, <b>{shortcut}</b>,
+          <b>{photo}</b> photo number, <b>{phototime}</b>, <b>{time}</b>, <b>{date}</b>, <b>{instructions}</b>, <b>{elapsed}</b>, <b>{photos}</b>, <b>{requests}</b>, <b>{tokens}</b>, <b>{engine}</b>.</div>
       </div>
+      <div class="hint">Shortcut Input is text, so photos aren’t sent.</div>
       <div class="presetBar">
         <button type="button" class="chip primary" id="tSave">Save trigger</button>
         <button type="button" class="chip danger" id="tDelete">Delete trigger</button>
@@ -1486,6 +1496,17 @@ const PAGE_JS = String.raw`
   let editingTrigger = null;
   let shortcutChain = Promise.resolve();
   let queuedUpdate = null;
+  const SEND_KINDS = ["summary", "frame", "raw", "parsed", "state", "all", "custom"];
+  const SEND_HINTS = {
+    summary: "The running summary of the session (in fresh mode: what the latest photo shows).",
+    frame: "What the AI wrote about the latest photo.",
+    raw: "The model\u2019s latest reply exactly as it came back (JSON or labelled text).",
+    parsed: "The latest reply as VisionX read it: frame, summary, tracked details and trigger answers, as JSON.",
+    state: "The tracked details (counts, IDs and so on) as JSON.",
+    all: "One JSON with the trigger and its reason, the photo\u2019s summary, the reply as received and as understood, the session summary, tracked details and stats. In Shortcuts, use Get Dictionary from Input to pick fields.",
+    custom: "Your own text. Placeholders below are filled in when the trigger runs.",
+  };
+  const SEND_LABELS = { summary: "the summary", frame: "the photo\u2019s AI summary", raw: "the reply as received", parsed: "the reply as understood", state: "the tracked details", all: "everything as JSON", custom: "a custom message" };
   const BT = String.fromCharCode(96);
   const ICON_PLAY = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l11-6.5z"/></svg>';
   const ICON_PAUSE = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5h3v14H8zM13 5h3v14h-3z"/></svg>';
@@ -2556,6 +2577,7 @@ const PAGE_JS = String.raw`
       add("Sent", codeBlock(highlightMixed(c.prompt)));
       if (c.raw) add("Reply as received", codeBlock(highlightMixed(c.raw)));
       if (c.verdict) add("Reply as understood", codeBlock(highlightJSON(JSON.stringify(c.verdict, null, 2))));
+      if (c.sent) add("Sent to the shortcut", codeBlock(highlightMixed(c.sent)));
       if (c.decision) add("What VisionX did", codeBlock(escHTML(c.decision), /didn't run|failed/.test(c.decision) ? "bad" : ""));
       if (c.error) add("Error", codeBlock(escHTML(c.error), "bad"));
       d.appendChild(inner);
@@ -3401,8 +3423,10 @@ const PAGE_JS = String.raw`
         verdict = parseVerdict(r.text);
       }
       log.verdict = verdict;
+      st.checkRaw = log.raw;
       if (!sess.running) { log.decision = "The session ended before the shortcut could run."; return; }
       log.decision = await applyVerdict(sess, st, verdict);
+      if (/ ran at /.test(log.decision || "")) log.sent = st.lastSent;
     } catch (e) {
       log.error = e.message;
       if (e.decision) log.decision = e.decision;
@@ -3444,6 +3468,7 @@ const PAGE_JS = String.raw`
     st.status = "firing";
     renderTriggerStatus();
     const text = shortcutInput(sess, st);
+    st.lastSent = text;
     try {
       await withShortcutLock(() => nativeCall("runShortcut", { shortcut: st.t.shortcut, text: text }, 600000));
     } catch (e) {
@@ -3462,17 +3487,68 @@ const PAGE_JS = String.raw`
     return st.decision;
   }
 
-  // What the trigger's shortcut receives as Shortcut Input.
-  function shortcutInput(sess, st) {
-    if (st.t.send !== "custom") return sess.summary;
-    const values = {
+  // What the trigger's shortcut receives as Shortcut Input (text; photos aren't sent).
+  function triggerContext(sess, st) {
+    const e = (sess.debug || []).find((x) => !(x.frame && x.frame.pending) && (x.raw || x.parsed)) || null;
+    const f = sess.frames.find((x) => !x.pending && (x.text || x.error)) || null;
+    const s = sess.stats, now = new Date();
+    return {
       summary: sess.summary || "",
+      frame: f ? (f.text || "") : "",
+      raw: e ? (e.raw || "") : "",
+      parsed: e && e.parsed ? JSON.stringify(e.parsed, null, 2) : "",
+      state: JSON.stringify(sess.state || {}, null, 2),
       reason: st.reason || "",
+      condition: st.t.condition,
+      check: st.checkRaw || "",
       name: st.t.name,
-      time: new Date().toLocaleTimeString(),
+      shortcut: st.t.shortcut,
+      time: now.toLocaleTimeString(),
+      date: now.toLocaleDateString(),
+      photo: f ? String(f.idx) : "",
+      phototime: f ? f.time : "",
+      instructions: cfg.instructions,
+      photos: String(s.photos),
+      requests: String(s.requests),
+      tokens: String(s.total),
+      elapsed: fmtDur(Date.now() - s.start - pausedMs(sess)),
+      engine: isApple() ? "Apple Intelligence" : (sess.by || cloud.name) + " " + cloud.model,
+      _parsed: e && e.parsed ? e.parsed : null,
+      _photo: f,
     };
-    return String(st.t.message || "").replace(/\{(summary|reason|name|time)\}/gi, (m, key) => values[key.toLowerCase()]);
   }
+
+  function everything(c) {
+    return {
+      trigger: { name: c.name, condition: c.condition, shortcut: c.shortcut, reason: c.reason, check_reply: c.check || undefined, date: c.date, time: c.time },
+      photo: { number: c._photo ? c._photo.idx : null, time: c.phototime || null, summary: c.frame },
+      reply: { as_received: c.raw, as_understood: c._parsed },
+      session: {
+        summary: c.summary, tracked_details: JSON.parse(c.state), instructions: c.instructions,
+        summary_mode: isMoment() ? "fresh each photo" : "built up over the session", analyzed_with: c.engine,
+        elapsed: c.elapsed, photos: +c.photos, requests: +c.requests, tokens: +c.tokens,
+      },
+    };
+  }
+
+  function shortcutInput(sess, st) {
+    const c = triggerContext(sess, st);
+    const kind = SEND_KINDS.indexOf(st.t.send) !== -1 ? st.t.send : "summary";
+    if (kind === "frame") return c.frame || c.summary;
+    if (kind === "raw") return c.raw;
+    if (kind === "parsed") return c.parsed;
+    if (kind === "state") return c.state;
+    if (kind === "all") return JSON.stringify(everything(c), null, 2);
+    if (kind === "custom") {
+      return String(st.t.message || "").replace(/\{([a-z]+)\}/gi, (m, k) => {
+        k = k.toLowerCase();
+        if (k === "all") return JSON.stringify(everything(c), null, 2);
+        return Object.prototype.hasOwnProperty.call(c, k) && k.charAt(0) !== "_" ? c[k] : m;
+      });
+    }
+    return c.summary;
+  }
+
 
   // Fresh mode: the photo's own answer says which conditions are met right now.
   function handleMomentVerdicts(sess, verdicts) {
@@ -3487,11 +3563,12 @@ const PAGE_JS = String.raw`
         return;
       }
       st.busy = true;
+      st.checkRaw = "";   // in fresh mode the photo's own reply answered the condition
       const log = { trigger: st.t.name, time: new Date().toLocaleTimeString(), prompt: "(judged inside this photo's request)", raw: "", verdict: v, error: "", decision: "" };
       const host = sess.debug[0];
       if (host) { host.checks.push(log); if (host.checks.length > 10) host.checks.shift(); }
       jobs.push(applyVerdict(sess, st, v)
-        .then((d) => { log.decision = d || ""; })
+        .then((d) => { log.decision = d || ""; if (/ ran at /.test(log.decision)) log.sent = st.lastSent; })
         .catch((e) => { log.error = e.message; log.decision = e.decision || ""; if (!e.cancelled) { st.status = "error"; st.error = e.message; } })
         .finally(() => { st.busy = false; if (sess === S) { renderTriggerStatus(); renderDebug(); } }));
     });
@@ -3596,7 +3673,7 @@ const PAGE_JS = String.raw`
       const sw = makeSwitch(t.enabled !== false, "Trigger " + t.name + " on", (on) => setTriggerEnabled(t.id, on));
       const txt = el("div", "tText");
       const modeText = { rise: "each time it becomes true", once: "only the first time", every: "every check while true", new: "for each new occurrence" }[t.mode || "rise"];
-      txt.append(el("b", null, t.name), el("span", "tsub", t.condition), el("span", "tsub", triggerWhenText(t) + "; runs \u201C" + t.shortcut + "\u201D " + modeText + ", sending " + (t.send === "custom" ? "a custom message" : "the summary") + "."));
+      txt.append(el("b", null, t.name), el("span", "tsub", t.condition), el("span", "tsub", triggerWhenText(t) + "; runs \u201C" + t.shortcut + "\u201D " + modeText + ", sending " + (SEND_LABELS[t.send] || SEND_LABELS.summary) + "."));
       const edit = el("button", "chip", "Edit");
       edit.type = "button";
       edit.disabled = S.running;
@@ -3643,7 +3720,8 @@ const PAGE_JS = String.raw`
     updateTrigFormUI();
     $("tMode").value = t.mode || "rise";
     $("tShortcut").value = t.shortcut;
-    $("tSend").value = t.send === "custom" ? "custom" : "summary";
+    $("tSend").value = SEND_KINDS.indexOf(t.send) !== -1 ? t.send : "summary";
+    $("tSendHint").textContent = SEND_HINTS[$("tSend").value];
     $("tMsg").value = t.message || "";
     $("tMsgBox").classList.toggle("hidden", $("tSend").value !== "custom");
     $("tDelete").classList.toggle("hidden", !id);
@@ -3659,6 +3737,7 @@ const PAGE_JS = String.raw`
     $("tMode").addEventListener("change", updateTrigFormUI);
     $("tSend").addEventListener("change", () => {
       const custom = $("tSend").value === "custom";
+      $("tSendHint").textContent = SEND_HINTS[$("tSend").value] || "";
       $("tMsgBox").classList.toggle("hidden", !custom);
       if (custom) $("tMsg").focus();
     });

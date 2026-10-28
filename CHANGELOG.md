@@ -2,6 +2,18 @@
 
 All notable changes to VisionX. Generated from `releases.json`; edit that file, not this one.
 
+## 1.12.0 (2026-10-28): Send your shortcuts everything
+
+- 📨 **Richer trigger input**: Send the photo's summary, the reply as received or understood, or tracked details.
+- 🧩 **Everything as JSON**: One JSON bundle with the trigger, photo, reply and session for your shortcut.
+- 🔖 **More placeholders**: Custom messages can use {frame}, {raw}, {parsed}, {state}, {all} and more.
+
+**Changes**
+
+- Send to the shortcut: capture summary, photo's AI summary, reply as received, reply as understood (JSON), tracked details (JSON), everything (JSON), or a custom message
+- Custom-message placeholders: {summary} {frame} {raw} {parsed} {state} {all} {reason} {condition} {check} {name} {shortcut} {photo} {phototime} {time} {date} {instructions} {elapsed} {photos} {requests} {tokens} {engine}
+- The debug log shows exactly what each trigger sent to its shortcut
+
 ## 1.11.0 (2026-10-28): Pause, follow along, see it drawn
 
 - ⏯️ **Start, pause, stop**: Control the session from a header that stays on top, with a countdown.

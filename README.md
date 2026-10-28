@@ -101,10 +101,17 @@ And **when to run** the shortcut:
 
 If a trigger says "met" but its shortcut didn't run, the trigger row and the debug log say why.
 
-Each trigger also chooses what its shortcut receives as **Shortcut Input**:
+Each trigger also chooses what its shortcut receives as **Shortcut Input** (text only; photos aren't sent):
 
 - **The capture summary**: the running summary, or in fresh mode what the latest photo shows.
-- **A custom message** you type, such as `Gate opened for {reason} at {time}`. The placeholders `{summary}`, `{reason}` (why the condition was met), `{name}` (the trigger's name) and `{time}` are filled in when it runs.
+- **The photo's AI summary**: what the AI wrote about the latest photo.
+- **The reply as received**: the model's latest reply, exactly as it came back.
+- **The reply as understood**: that reply as VisionX read it (frame, summary, tracked details, trigger answers), as JSON.
+- **Tracked details**: the counts and IDs the model keeps, as JSON.
+- **Everything**: one JSON with the trigger and its reason, the photo's summary, the reply as received and as understood, the session summary, tracked details and stats. In Shortcuts, *Get Dictionary from Input* lets you pick fields.
+- **A custom message** you type, such as `Gate opened for {reason} at {time}`. Placeholders: `{summary}`, `{frame}`, `{raw}`, `{parsed}`, `{state}`, `{all}`, `{reason}`, `{condition}`, `{check}` (the trigger check's own reply), `{name}`, `{shortcut}`, `{photo}`, `{phototime}`, `{time}`, `{date}`, `{instructions}`, `{elapsed}`, `{photos}`, `{requests}`, `{tokens}`, `{engine}`.
+
+The debug log shows exactly what each trigger sent.
 
 For example, a shortcut can use *Show Notification* with Shortcut Input, or *Control Home* to open a gate. Running a shortcut briefly switches to the Shortcuts app and back, and only one shortcut runs at a time.
 
