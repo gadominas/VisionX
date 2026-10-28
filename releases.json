@@ -4,6 +4,39 @@
   "script": "VisionX.js",
   "releases": [
     {
+      "version": "1.15.0",
+      "date": "2026-10-29",
+      "title": "Charts you can actually see",
+      "highlights": [
+        {
+          "icon": "📊",
+          "title": "Real charts in summaries",
+          "text": "Pie, bar and line charts from the AI now draw as graphics, not code."
+        },
+        {
+          "icon": "✨",
+          "title": "Make it visual",
+          "text": "One tap rewrites your instructions so results come back as charts and tiles."
+        },
+        {
+          "icon": "🔢",
+          "title": "Headline number tiles",
+          "text": "Key counts show as big, easy-to-read tiles at the top of the summary."
+        }
+      ],
+      "changes": [
+        "Mermaid pie blocks draw as a donut with a legend of counts and shares",
+        "Mermaid xychart-beta blocks draw as horizontal bars and/or a line chart",
+        "New stats blocks draw as headline number tiles with an optional note",
+        "\"Make it visual\" button next to Refine with AI and in the instructions editor",
+        "The model is told exactly which visuals the app can draw, so it uses the right syntax",
+        "Charts use the selected palette and work offline; anything that doesn't parse stays a code block"
+      ],
+      "fixes": [
+        "The Session ended sheet shows the summary formatted, instead of raw Markdown"
+      ]
+    },
+    {
       "version": "1.14.0",
       "date": "2026-10-29",
       "title": "Live, analyzing, analyzed: one row",

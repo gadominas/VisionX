@@ -28,7 +28,7 @@ const STORE_FILE = "vision-session.json"; // presets + settings, in Scriptable's
 // ───────── Version and in-app updates ─────────
 // This build's version. When releasing, bump it and add a matching entry to releases.json.
 // Keep these two lines exactly in this form (single quotes): the updater reads them from downloads.
-const VERSION = '1.14.0';
+const VERSION = '1.15.0';
 const APP_ID = 'visionx';   // unique per app, never changes
 const REPO_RAW = 'https://raw.githubusercontent.com/gadominas/VisionX/main/';
 const SCRIPT_FILE = 'VisionX.js';   // the script's file name in the repository
@@ -861,7 +861,7 @@ textarea:focus,input:focus,select:focus{outline:none;border-color:var(--ink)}
 .text.pending{color:var(--graphite);font-style:italic}
 
 /* End-of-session sheet */
-.labelRow{display:flex;align-items:flex-end;justify-content:space-between;gap:8px;margin-top:12px}
+.labelRow{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:8px;margin-top:12px}
 .labelRow label{margin:0}
 .labelRow .chips{display:flex;gap:6px;flex:none}
 .chip.small{height:30px;padding:0 10px;font-size:calc(13px * var(--ts))}
@@ -970,7 +970,7 @@ details.dbgCheck>summary{font-size:calc(13px * var(--ts));cursor:pointer}
 .sheet table{width:100%;border-collapse:collapse;margin:12px 0 16px}
 .sheet td{padding:7px 0;border-bottom:1px solid var(--rule);font-size:calc(15px * var(--ts))}
 .sheet td+td{text-align:right}
-.sheet .final{white-space:pre-wrap;background:var(--field);padding:12px;border-radius:10px;font-size:calc(14px * var(--ts))}
+.sheet .final{background:var(--field);padding:12px;border-radius:10px;font-size:calc(14px * var(--ts))}
 .sheet .btn{width:100%;margin-top:16px;flex:none}
 
 /* Tiny: older photos as one line each (number, time and summary); tap one to see it whole */
@@ -1087,6 +1087,45 @@ body.d-tiny .older article.open img{order:3;width:100%}
 .md hr{border:0;border-top:1px solid var(--rule);margin:.6em 0}
 .md .mdlink{text-decoration:underline}
 .md .mdgauge{width:100%;max-width:240px;height:12px;vertical-align:middle;accent-color:var(--done)}
+/* Charts the model asks for (mermaid pie / xychart, stats tiles), drawn in the page's own colours */
+.vxChart{--c1:var(--signal);--c2:var(--amber);--c3:#4C8DF6;--c4:#9B6BE0;--c5:var(--rec);--c6:#3FA34D;--c7:#D6609A;--c8:var(--muted);
+  margin:.4em 0 .8em;padding:10px 12px;border:1px solid var(--rule);border-radius:12px;background:var(--surface);
+  font:calc(13px * var(--ts,1))/1.35 var(--rounded);white-space:normal}
+.vxChart figcaption{font-weight:700;font-size:calc(14px * var(--ts,1));margin:0 0 8px;color:var(--ink)}
+.vxc1{--k:var(--c1)}.vxc2{--k:var(--c2)}.vxc3{--k:var(--c3)}.vxc4{--k:var(--c4)}.vxc5{--k:var(--c5)}.vxc6{--k:var(--c6)}.vxc7{--k:var(--c7)}.vxc8{--k:var(--c8)}
+.vxPieBody{display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px}
+.vxDonut{width:min(132px,42%);min-width:104px;flex:none;height:auto;display:block}
+.vxDonut .vxSeg{fill:none;stroke:var(--k);stroke-width:6.5}
+.vxDonut .vxTrackC{fill:none;stroke:var(--field);stroke-width:6.5}
+.vxDonut .vxTot{fill:var(--ink);font:700 9px var(--rounded);text-anchor:middle;font-variant-numeric:tabular-nums}
+.vxDonut .vxTotL{fill:var(--muted);font:500 3.6px var(--rounded);text-anchor:middle}
+.md .vxLegend,.vxLegend{list-style:none;margin:0;padding:0;flex:1 1 150px;min-width:0}
+.md .vxLegend li{display:grid;grid-template-columns:10px minmax(0,1fr) auto 3.4em;align-items:center;gap:7px;margin:0;padding:3px 0;border-bottom:1px solid var(--rule)}
+.md .vxLegend li:last-child{border-bottom:0}
+.vxSw{width:10px;height:10px;border-radius:3px;background:var(--k)}
+.vxL{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ink)}
+.vxV{font-weight:700;font-variant-numeric:tabular-nums;text-align:right}
+.vxP{color:var(--muted);font-variant-numeric:tabular-nums;text-align:right;font-size:.92em}
+.vxBars{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:6px 8px}
+.vxBars .vxL{max-width:9em}
+.vxTrack{height:12px;border-radius:6px;background:var(--field);overflow:hidden;display:flex;flex-direction:column;justify-content:center;gap:1px}
+.vxTrack i{display:block;height:100%;min-width:2px;border-radius:6px;background:var(--k)}
+.vxTrack.multi{height:auto;background:none;gap:2px}
+.vxTrack.multi i{height:6px}
+.vxKeys{display:flex;flex-wrap:wrap;gap:4px 12px;margin:8px 0 0;color:var(--muted);font-size:.92em}
+.vxKeys span{display:inline-flex;align-items:center;gap:5px}
+.vxLine{width:100%;height:auto;display:block;margin-top:4px}
+.vxLine .vxGrid{stroke:var(--rule);stroke-width:1}
+.vxLine .vxPath{fill:none;stroke:var(--k);stroke-width:2.2;stroke-linejoin:round;stroke-linecap:round}
+.vxLine .vxDot{fill:var(--surface);stroke:var(--k);stroke-width:2}
+.vxLine text{fill:var(--muted);font:500 10px var(--rounded);font-variant-numeric:tabular-nums}
+.vxStats{display:grid;grid-template-columns:repeat(auto-fit,minmax(92px,1fr));gap:8px;margin:.4em 0 .8em;white-space:normal}
+.vxTile{background:var(--surface);border:1px solid var(--rule);border-radius:12px;padding:8px 10px;min-width:0}
+.vxTile b{display:block;font:700 calc(22px * var(--ts,1))/1.1 var(--rounded);color:var(--done);font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.vxTile span{display:block;font:500 calc(12px * var(--ts,1))/1.3 var(--rounded);color:var(--ink);margin-top:3px}
+.vxTile small{display:block;font:calc(11px * var(--ts,1))/1.3 var(--rounded);color:var(--muted);margin-top:2px}
+.chip.visual{border-color:var(--done);color:var(--done);font-weight:600}
+.chip.visual:disabled{opacity:.5}
 .md .muted{color:var(--graphite)}
 .md .err{color:var(--rec)}
 .heroSummary #summary.md{margin:0}
@@ -1275,6 +1314,7 @@ body:not(.d-tiny) .older .text.md{max-height:4.6em;overflow:hidden;-webkit-mask-
     <div class="labelRow">
       <label for="instructions">Instructions for the model</label>
       <div class="chips">
+        <button type="button" class="chip small visual" id="iVisual" aria-label="Make the results visual: rewrite the instructions to answer with charts">✨ Make it visual</button>
         <button type="button" class="chip small" id="iRefine">Refine with AI</button>
         <button type="button" class="chip small" id="iExpand" aria-label="Expand the instructions editor">Expand</button>
       </div>
@@ -1496,6 +1536,7 @@ body:not(.d-tiny) .older .text.md{max-height:4.6em;overflow:hidden;-webkit-mask-
       <h2 id="edRefineTitle">Refine with AI</h2>
       <div class="hint">Rewrites your instructions so the model knows exactly what to look for, count and report. You decide whether to use the result.</div>
       <div class="presetBar">
+        <button type="button" class="chip visual" id="edVisual">✨ Make it visual</button>
         <button type="button" class="chip" data-ask="Make it clearer and less ambiguous.">Clearer</button>
         <button type="button" class="chip" data-ask="Make it more specific: say exactly what to look for, what to count or track, and what to ignore.">More specific</button>
         <button type="button" class="chip" data-ask="Make it shorter without losing anything important.">Shorter</button>
@@ -1512,7 +1553,7 @@ body:not(.d-tiny) .older .text.md{max-height:4.6em;overflow:hidden;-webkit-mask-
       <h1 id="mTitle">Session ended</h1>
       <table class="num" id="mTable"></table>
       <h2>Final result</h2>
-      <div class="final" id="mSummary"></div>
+      <div class="final md" id="mSummary"></div>
       <button class="btn" id="mClose">Done</button>
     </div>
   </div>
@@ -1560,7 +1601,7 @@ const PAGE_JS = String.raw`
   let sessions = Array.isArray(BOOT.sessions) ? BOOT.sessions : [];
   const LS_KEY = "vision-session-store-v2";
   const LS_OLD = "vision-session-settings-v1";
-  const PRESET_IDS = ["preset", "pUpdate", "pNew", "pDelete", "pName", "pSave", "pCancel", "iRefine", "iExpand", "applePhotos"];
+  const PRESET_IDS = ["preset", "pUpdate", "pNew", "pDelete", "pName", "pSave", "pCancel", "iRefine", "iVisual", "iExpand", "applePhotos"];
   // Claude or OpenAI, as chosen in AI settings. Keys never reach this page.
   const cloud = { hasKey: !!(BOOT.ai && BOOT.ai.hasKey), name: (BOOT.ai && BOOT.ai.name) || "Claude", model: (BOOT.ai && BOOT.ai.model) || "" };
   const FIELDS = ["instructions", "interval", "engine", "shortcut", "checkShortcut", "detail", "maxSide", "facing"];
@@ -2732,6 +2773,154 @@ const PAGE_JS = String.raw`
     t = t.replace(/~~([^~]+)~~/g, "<del>$1</del>");
     return t.replace(/\u0000(\d+)\u0000/g, (m, n) => keep[+n] || "");
   }
+  // ── Charts in AI text ──
+  // Mermaid pie and xychart-beta blocks, and stats tiles, are drawn here as SVG/HTML in the
+  // page's colours: offline, instant on every photo, and nothing from the model runs as code.
+  // Anything that doesn't parse stays a plain code block.
+  const VX_SLOTS = 8;
+  const vxNum = (s) => { const v = parseFloat(String(s).replace(/[\s,]/g, "")); return isFinite(v) ? v : NaN; };
+  const vxFmt = (v) => String(Math.round(v * 100) / 100);
+  const vxPct = (p) => (Math.round(p * 10) / 10) + "%";
+  const vxUnq = (s) => String(s || "").trim().replace(/^["']|["']$/g, "").trim();
+  function vxList(s) {
+    const out = [];
+    String(s).replace(/"([^"]*)"|'([^']*)'|([^,]+)/g, (m, a, b, c) => { const t = (a != null ? a : b != null ? b : c).trim(); if (t) out.push(t); return m; });
+    return out;
+  }
+  function chartBlock(lang, body) {
+    const src = body.join("\n").replace(/^\s*%%.*$/gm, "").trim();
+    const first = (src.split("\n")[0] || "").trim().toLowerCase();
+    try {
+      if (lang === "stats" || lang === "kpi") return renderStats(src);
+      if (lang && ["mermaid", "pie", "xychart", "xychart-beta", "chart"].indexOf(lang) === -1) return null;
+      if (/^pie\b/.test(first)) return renderPie(src);
+      if (lang === "pie") return renderPie("pie\n" + src);
+      if (/^xychart(-beta)?\b/.test(first)) return renderXY(src);
+    } catch (_) {}
+    return null;
+  }
+  function vxFigure(cls, title, inner, aria) {
+    return '<figure class="vxChart ' + cls + '" role="img" aria-label="' + escHTML(aria) + '">' +
+      (title ? "<figcaption>" + mdInline(title) + "</figcaption>" : "") + inner + "</figure>";
+  }
+  function renderPie(src) {
+    const lines = src.split("\n");
+    let title = "";
+    const head = /^\s*pie\b(?:\s+showData)?(?:\s+title\s+(.+?))?\s*$/i.exec(lines[0]);
+    if (head && head[1]) title = vxUnq(head[1]);
+    let items = [];
+    lines.slice(1).forEach((l) => {
+      let m;
+      if ((m = /^\s*title\s+(.+?)\s*$/i.exec(l))) { title = vxUnq(m[1]); return; }
+      if (!(m = /^\s*(?:"([^"]*)"|'([^']*)'|([^:"']+?))\s*:\s*(-?[\d.,]+)\s*%?\s*$/.exec(l))) return;
+      const v = vxNum(m[4]);
+      let label = (m[1] != null ? m[1] : m[2] != null ? m[2] : m[3]).trim();
+      // "Dogs \u2014 1 (14.3%)": the legend already shows the number and share, so drop the repeat.
+      const tail = /\s*(?:[\u2014\u2013:-])?\s*(-?[\d.,]+)\s*(?:\(\s*[\d.,]+\s*%\s*\))?\s*$/.exec(label);
+      if (tail && tail.index > 0 && Math.abs(vxNum(tail[1]) - v) < 1e-9) label = label.slice(0, tail.index).trim();
+      label = label.replace(/\s*\(\s*[\d.,]+\s*%\s*\)\s*$/, "").trim();
+      if (isFinite(v) && v > 0 && label) items.push({ label: label, v: v });
+    });
+    if (!items.length) return null;
+    items = items.map((it, k) => ({ label: it.label, v: it.v, k: k })).sort((a, b) => b.v - a.v || a.k - b.k);
+    if (items.length > VX_SLOTS) {
+      const rest = items.slice(VX_SLOTS - 1);
+      items = items.slice(0, VX_SLOTS - 1).concat([{ label: "Other (" + rest.length + ")", v: rest.reduce((a, b) => a + b.v, 0) }]);
+    }
+    const total = items.reduce((a, b) => a + b.v, 0);
+    const R = 15.9155; // circumference 100, so dash lengths are percentages
+    let off = 25, segs = "";
+    items.forEach((it, k) => {
+      const p = it.v / total * 100, gap = items.length > 1 && p > 2 ? 0.9 : 0;
+      segs += '<circle class="vxSeg vxc' + (k + 1) + '" cx="21" cy="21" r="' + R + '" stroke-dasharray="' + (p - gap).toFixed(3) + " " + (100 - p + gap).toFixed(3) + '" stroke-dashoffset="' + off.toFixed(3) + '"/>';
+      off -= p;
+    });
+    const svg = '<svg class="vxDonut" viewBox="0 0 42 42" aria-hidden="true"><circle class="vxTrackC" cx="21" cy="21" r="' + R + '"/>' + segs +
+      '<text class="vxTot" x="21" y="23.2">' + escHTML(vxFmt(total)) + '</text><text class="vxTotL" x="21" y="28">total</text></svg>';
+    const legend = '<ul class="vxLegend">' + items.map((it, k) =>
+      '<li class="vxc' + (k + 1) + '"><i class="vxSw"></i><span class="vxL">' + mdInline(it.label) + '</span><span class="vxV">' + escHTML(vxFmt(it.v)) + '</span><span class="vxP">' + vxPct(it.v / total * 100) + "</span></li>").join("") + "</ul>";
+    const aria = (title ? title + ". " : "") + items.map((it) => it.label + " " + vxFmt(it.v) + " (" + vxPct(it.v / total * 100) + ")").join(", ");
+    return vxFigure("vxPie", title, '<div class="vxPieBody">' + svg + legend + "</div>", aria);
+  }
+  function renderXY(src) {
+    let title = "", cats = null, yMin = NaN, yMax = NaN;
+    const bars = [], lns = [];
+    src.split("\n").slice(1).forEach((l) => {
+      let m;
+      if ((m = /^\s*title\s+(.+?)\s*$/i.exec(l))) { title = vxUnq(m[1]); return; }
+      if ((m = /^\s*x-axis\b.*?\[(.*)\]\s*$/i.exec(l))) { cats = vxList(m[1]); return; }
+      if ((m = /^\s*y-axis\b.*?(-?[\d.]+)\s*-->\s*(-?[\d.]+)\s*$/i.exec(l))) { yMin = vxNum(m[1]); yMax = vxNum(m[2]); return; }
+      if ((m = /^\s*(bar|line)\b\s*(?:"([^"]*)"|'([^']*)')?\s*\[(.*)\]\s*$/i.exec(l))) {
+        const vals = vxList(m[4]).map(vxNum);
+        if (!vals.length || vals.some((v) => !isFinite(v))) return;
+        (m[1].toLowerCase() === "bar" ? bars : lns).push({ name: m[2] || m[3] || "", vals: vals });
+      }
+    });
+    if (!bars.length && !lns.length) return null;
+    const n = Math.max.apply(null, bars.concat(lns).map((s) => s.vals.length));
+    if (!cats || cats.length < n) cats = Array.from({ length: n }, (_, k) => (cats && cats[k]) || String(k + 1));
+    const series = bars.concat(lns);
+    const keys = series.length > 1 ? '<div class="vxKeys">' + series.map((s, k) =>
+      '<span class="vxc' + (k % VX_SLOTS + 1) + '"><i class="vxSw"></i>' + escHTML(s.name || (k < bars.length ? "Bars" + (bars.length > 1 ? " " + (k + 1) : "") : "Line" + (lns.length > 1 ? " " + (k - bars.length + 1) : ""))) + "</span>").join("") + "</div>" : "";
+    let inner = "";
+    if (bars.length) {
+      const top = Math.max(isFinite(yMax) ? yMax : 0, Math.max.apply(null, bars.map((s) => Math.max.apply(null, s.vals)))) || 1;
+      inner += '<div class="vxBars">';
+      for (let k = 0; k < n; k++) {
+        const vals = bars.map((s) => s.vals[k]);
+        const tr = bars.map((s, j) => '<i class="vxc' + (j + 1) + '" style="width:' + Math.max(0, Math.min(100, (s.vals[k] || 0) / top * 100)).toFixed(1) + '%"></i>').join("");
+        inner += '<span class="vxL">' + mdInline(cats[k]) + '</span><span class="vxTrack' + (bars.length > 1 ? " multi" : "") + '">' + tr + '</span><span class="vxV">' +
+          vals.map((v) => (isFinite(v) ? escHTML(vxFmt(v)) : "\u2013")).join(" / ") + "</span>";
+      }
+      inner += "</div>";
+    }
+    if (lns.length) {
+      const all = [].concat.apply([], lns.map((s) => s.vals));
+      let lo = isFinite(yMin) ? yMin : Math.min(0, Math.min.apply(null, all)), hi = isFinite(yMax) ? yMax : Math.max.apply(null, all);
+      if (hi <= lo) hi = lo + 1;
+      const W = 260, H = 120, L = 30, Rt = 8, T = 10, B = 22, pw = W - L - Rt, ph = H - T - B;
+      const X = (k) => L + (n > 1 ? k * pw / (n - 1) : pw / 2), Y = (v) => T + (1 - (v - lo) / (hi - lo)) * ph;
+      let g = '<line class="vxGrid" x1="' + L + '" y1="' + T + '" x2="' + (W - Rt) + '" y2="' + T + '"/><line class="vxGrid" x1="' + L + '" y1="' + (T + ph) + '" x2="' + (W - Rt) + '" y2="' + (T + ph) + '"/>' +
+        '<text x="' + (L - 4) + '" y="' + (T + 4) + '" text-anchor="end">' + escHTML(vxFmt(hi)) + '</text><text x="' + (L - 4) + '" y="' + (T + ph + 3) + '" text-anchor="end">' + escHTML(vxFmt(lo)) + "</text>";
+      const step = Math.max(1, Math.ceil(n / 5));
+      for (let k = 0; k < n; k += step) g += '<text x="' + X(k).toFixed(1) + '" y="' + (H - 6) + '" text-anchor="middle">' + escHTML(String(cats[k]).slice(0, 8)) + "</text>";
+      lns.forEach((s, j) => {
+        const cls = "vxc" + ((bars.length + j) % VX_SLOTS + 1);
+        const pts = s.vals.map((v, k) => X(k).toFixed(1) + "," + Y(v).toFixed(1));
+        g += '<g class="' + cls + '"><polyline class="vxPath" points="' + pts.join(" ") + '"/>' +
+          (n <= 24 ? pts.map((p) => '<circle class="vxDot" r="2.8" cx="' + p.split(",")[0] + '" cy="' + p.split(",")[1] + '"/>').join("") : "") + "</g>";
+      });
+      inner += '<svg class="vxLine" viewBox="0 0 ' + W + " " + H + '" aria-hidden="true">' + g + "</svg>";
+    }
+    const aria = (title ? title + ". " : "") + series.map((s) => (s.name ? s.name + ": " : "") + cats.slice(0, n).map((c, k) => c + " " + (isFinite(s.vals[k]) ? vxFmt(s.vals[k]) : "none")).join(", ")).join("; ");
+    return vxFigure("vxXY", title, inner + keys, aria);
+  }
+  function renderStats(src) {
+    const tiles = [];
+    src.split("\n").forEach((l) => {
+      const t = l.replace(/^\s*[-*+]\s+/, "").trim();
+      const c = t.indexOf(":");
+      if (c <= 0) return;
+      const rest = t.slice(c + 1).split("|");
+      const value = rest[0].trim();
+      if (value) tiles.push({ label: t.slice(0, c).trim(), value: value, note: (rest[1] || "").trim() });
+    });
+    if (!tiles.length) return null;
+    return '<div class="vxStats">' + tiles.slice(0, 8).map((x) =>
+      '<div class="vxTile"><b>' + mdInline(x.value) + "</b><span>" + mdInline(x.label) + "</span>" + (x.note ? "<small>" + mdInline(x.note) + "</small>" : "") + "</div>").join("") + "</div>";
+  }
+
+  // The visuals the page can draw, told to the model (with every photo, and when refining).
+  function visualGuide() {
+    const F = BT + BT + BT;
+    return [
+      "- Shares of a whole: a donut chart. Write a code block opened with " + F + "mermaid and closed with " + F + ", containing: pie title <short title>, then one line per slice: \"<label>\" : <number>. Labels without the number or percentage; the app adds them.",
+      "- Counts per category (bars) or change over time (line): a " + F + "mermaid code block containing: xychart-beta, then title \"<short title>\", x-axis [a, b, c], then bar [1, 2, 3] and/or line [1, 2, 3].",
+      "- 2 to 4 headline numbers as tiles: a " + F + "stats code block, one tile per line: <label>: <value> | <optional short note>.",
+      "- A level or progress: <meter value=\"0.7\"></meter> or <progress value=\"3\" max=\"5\"></progress>.",
+      "- Tables for per-item details; an emoji before a label as an icon.",
+    ].join("\n");
+  }
   function md(src) {
     const lines = String(src == null ? "" : src).replace(/\r\n?/g, "\n").split("\n");
     const fenceRe = new RegExp("^\\s*(" + BT + "{3,}|~{3,})");
@@ -2746,10 +2935,11 @@ const PAGE_JS = String.raw`
       if (m) {
         flush();
         const fence = m[1].charAt(0).repeat(3), body = [];
+        const lang = (line.trim().slice(m[1].length).trim().split(/\s+/)[0] || "").toLowerCase();
         i++;
         while (i < lines.length && lines[i].trim().indexOf(fence) !== 0) { body.push(lines[i]); i++; }
         i++;
-        html += '<pre class="mdpre"><code>' + escHTML(body.join("\n")) + "</code></pre>";
+        html += chartBlock(lang, body) || ('<pre class="mdpre"><code>' + escHTML(body.join("\n")) + "</code></pre>");
         continue;
       }
       if (!line.trim()) { flush(); i++; continue; }
@@ -2865,8 +3055,9 @@ const PAGE_JS = String.raw`
   function mdHint(labelled) {
     return "Formatting: write plain sentences unless the user task asks for formatting or visuals. If it does, " +
       (labelled ? "FRAME and SUMMARY" : "\"frame\" and \"summary\"") +
-      " may use Markdown: headings, **bold**, lists, tables and code blocks. Text is shown in a fixed-width font, so draw bars with Unicode blocks inside a code block (for example: People \u2588\u2588\u2588\u2588\u2588\u2588\u2591\u2591\u2591\u2591 6), and gauges with <meter value=\"0.7\"></meter> or <progress value=\"3\" max=\"5\"></progress>. No other HTML." +
-      (labelled ? " Inside FRAME and SUMMARY, never start a line with FRAME:, SUMMARY:, STATE: or TRIGGERS:." : " Inside JSON strings, write line breaks as \\n.");
+      " may use Markdown (headings, **bold**, lists, tables) and these visuals, which the app draws as graphics:\n" + visualGuide() +
+      "\nNo other HTML or diagram types. Put visuals in " + (labelled ? "SUMMARY" : "\"summary\"") + "; keep " + (labelled ? "FRAME" : "\"frame\"") + " to a sentence or two." +
+      (labelled ? " Inside FRAME and SUMMARY, never start a line with FRAME:, SUMMARY:, STATE: or TRIGGERS:." : " Inside JSON strings, write line breaks as \\n and quotes as \\\".");
   }
 
   // ── analysis progress on the photo being analyzed ──
@@ -3455,7 +3646,7 @@ const PAGE_JS = String.raw`
     $("edCount").textContent = words + (words === 1 ? " word" : " words") + ", " + t.length + " characters";
   }
 
-  function refinePrompt(current, ask) {
+  function refinePrompt(current, ask, visual) {
     return [
       "You improve instructions for a vision model. The model looks at photos from a live phone camera, one photo every few seconds, and answers by following these instructions.",
       isMoment()
@@ -3463,7 +3654,10 @@ const PAGE_JS = String.raw`
         : "Each photo is merged into one running summary for the whole session, so the instructions should say what to track and count over time.",
       "",
       "Rewrite the instructions so they are clear, specific and unambiguous: what to look for, what to count or track, what to ignore, and how to phrase the answer (concise).",
-      "Keep the user's intent, any names, numbers or plates they gave, and the language they wrote in. Don't add output-format or JSON rules; the app adds those. Don't invent requirements the user didn't imply.",
+      "Keep the user's intent, any names, numbers or plates they gave, and the language they wrote in. Don't invent requirements the user didn't imply.",
+      visual
+        ? "Don't add JSON or reply-format rules; the app adds those. Do add a short final paragraph on how to present the answer, naming the exact visual(s) for this task and what goes in each. Use only these visuals, which the app draws as graphics:\n" + visualGuide()
+        : "Don't add output-format or JSON rules; the app adds those.",
       ask ? "\nREQUESTED CHANGE:\n" + ask : "",
       "",
       "CURRENT INSTRUCTIONS:",
@@ -3487,17 +3681,18 @@ const PAGE_JS = String.raw`
     return { text: src, why: "" };
   }
 
-  async function refineInstructions(ask) {
+  const VISUAL_ASK = "Make the results visually compelling. The summary should open with one short headline sentence, then show the numbers as visuals that fit the data: a donut for shares of a whole, bars for counts per category, a line for change over time, stat tiles for the 2 to 4 numbers that matter most, a gauge for a level or progress, and a table only for per-item details. Keep labels short; an emoji per category is welcome.";
+  async function refineInstructions(ask, visual) {
     const current = $("edText").value.trim();
     if (!current) { $("edStatus").textContent = "Write some instructions first."; $("edText").focus(); return; }
     if (refining) return;
     refining = true;
-    const buttons = document.querySelectorAll("#editor .edRefine button, #edUse, #edKeep");
+    const buttons = document.querySelectorAll("#editor .edRefine button, #edUse, #edKeep, #iVisual");
     buttons.forEach((b) => { b.disabled = true; });
     $("edSuggest").classList.add("hidden");
-    $("edStatus").textContent = "Refining…";
+    $("edStatus").textContent = visual ? "Adding charts and visuals…" : "Refining…";
     try {
-      const prompt = refinePrompt(current, ask);
+      const prompt = refinePrompt(current, ask, visual);
       let reply, via;
       if (cloud.hasKey) {
         const r = await aiRequest(() => ({ feature: "refine", system: "You improve instructions for a photo-analysis app. Follow the requested reply format exactly.", text: prompt, maxTokens: 2000 }));
@@ -3532,6 +3727,9 @@ const PAGE_JS = String.raw`
   function wireEditor() {
     $("iExpand").addEventListener("click", () => openEditor(false));
     $("iRefine").addEventListener("click", () => openEditor(true));
+    const visualRefine = () => { const extra = $("edAsk").value.trim(); refineInstructions(VISUAL_ASK + (extra ? " Also: " + extra : ""), true); };
+    $("iVisual").addEventListener("click", () => { openEditor(true); visualRefine(); });
+    $("edVisual").addEventListener("click", visualRefine);
     $("edCancel").addEventListener("click", () => closeEditor(false));
     $("edDone").addEventListener("click", () => closeEditor(true));
     $("edText").addEventListener("input", updateEditorCount);
@@ -4357,7 +4555,7 @@ const PAGE_JS = String.raw`
       tr.append(el("td", null, k), el("td", null, String(v)));
       t.appendChild(tr);
     });
-    $("mSummary").textContent = S.summary || "No photo was analyzed in this session.";
+    $("mSummary").innerHTML = S.summary ? md(S.summary) : "<p>No photo was analyzed in this session.</p>";
     $("modal").classList.remove("hidden");
     $("mClose").focus();
   }

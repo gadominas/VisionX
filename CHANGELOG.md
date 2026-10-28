@@ -2,6 +2,25 @@
 
 All notable changes to VisionX. Generated from `releases.json`; edit that file, not this one.
 
+## 1.15.0 (2026-10-29): Charts you can actually see
+
+- 📊 **Real charts in summaries**: Pie, bar and line charts from the AI now draw as graphics, not code.
+- ✨ **Make it visual**: One tap rewrites your instructions so results come back as charts and tiles.
+- 🔢 **Headline number tiles**: Key counts show as big, easy-to-read tiles at the top of the summary.
+
+**Changes**
+
+- Mermaid pie blocks draw as a donut with a legend of counts and shares
+- Mermaid xychart-beta blocks draw as horizontal bars and/or a line chart
+- New stats blocks draw as headline number tiles with an optional note
+- "Make it visual" button next to Refine with AI and in the instructions editor
+- The model is told exactly which visuals the app can draw, so it uses the right syntax
+- Charts use the selected palette and work offline; anything that doesn't parse stays a code block
+
+**Fixes**
+
+- The Session ended sheet shows the summary formatted, instead of raw Markdown
+
 ## 1.14.0 (2026-10-29): Live, analyzing, analyzed: one row
 
 - 🖼️ **Three photos, one row**: Live camera, the photo being analyzed and the last analyzed one, side by side.
