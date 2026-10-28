@@ -28,7 +28,7 @@ const STORE_FILE = "vision-session.json"; // presets + settings, in Scriptable's
 // ───────── Version and in-app updates ─────────
 // This build's version. When releasing, bump it and add a matching entry to releases.json.
 // Keep these two lines exactly in this form (single quotes): the updater reads them from downloads.
-const VERSION = '1.13.0';
+const VERSION = '1.14.0';
 const APP_ID = 'visionx';   // unique per app, never changes
 const REPO_RAW = 'https://raw.githubusercontent.com/gadominas/VisionX/main/';
 const SCRIPT_FILE = 'VisionX.js';   // the script's file name in the repository
@@ -1151,6 +1151,40 @@ body.d-tiny .older article.open img{order:3;width:100%}
 .tr2m .switch{margin:0;flex:none}
 .tr2off{display:block;width:100%;text-align:left;background:none;border:0;border-top:1px solid var(--rule);padding:8px 12px;font:inherit;font-size:12px;color:var(--graphite);cursor:pointer}
 @media (prefers-reduced-motion:reduce){.tr2.checking .tdot,.tr2.firing .tdot{animation:none}}
+/* One row: Live, Analyzing, Analyzed */
+.liveGrid{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.liveGrid figcaption{font-size:11px;line-height:1.3;margin-top:4px;min-height:1.3em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.livePane .liveWrap,.livePane .liveWrap.aiming{border-radius:12px}
+.liveApple{border-radius:12px;font-size:11px;padding:8px}
+.liveTag{left:6px;top:6px;font-size:10px;padding:2px 6px}
+.nowPhoto,.lastPhoto{position:relative;aspect-ratio:3/4;border-radius:12px;overflow:hidden;background:#000}
+.lastPhoto img{display:block;width:100%;height:100%;object-fit:cover}
+.lastPhoto .placeholder{aspect-ratio:auto;height:100%;padding:8px;font-size:11px;text-align:center}
+.nowBadge{left:6px;top:6px;font-size:10px;padding:2px 6px}
+.lastPhoto:not(.empty){box-shadow:0 0 0 2px var(--done)}
+.lastPhoto.fresh{animation:vxpop .9s ease}
+@keyframes vxpop{0%,100%{box-shadow:0 0 0 2px var(--done)}40%{box-shadow:0 0 0 6px color-mix(in srgb,var(--done) 70%,transparent)}}
+.inSum{position:absolute;left:0;right:0;bottom:0;padding:14px 4px 6px;font-size:10px;font-weight:700;color:#fff;text-align:center;background:linear-gradient(transparent,color-mix(in srgb,var(--done) 85%,#000))}
+.inSum.bad{background:linear-gradient(transparent,color-mix(in srgb,var(--rec) 85%,#000))}
+.nowWait{display:grid;place-content:center;height:100%;padding:8px;text-align:center;color:#9aa3ae;font-size:11px;line-height:1.3}
+.nowWait b{display:block;font:800 22px/1.1 ui-rounded,-apple-system,system-ui,sans-serif;color:#fff;margin-bottom:4px}
+.anlBox{width:52px;height:52px}
+.anlPct{font-size:12px}
+.anlTxt{font-size:10px;padding:12px 4px 5px}
+/* zoom buttons on the live preview */
+.zoomChips{position:absolute;left:0;right:0;bottom:6px;display:flex;justify-content:center;gap:3px}
+.zoomChips button{min-width:26px;height:24px;padding:0 5px;border:0;border-radius:12px;background:rgba(0,0,0,.55);color:#fff;font:700 11px/1 -apple-system,system-ui,sans-serif;cursor:pointer;-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px)}
+.zoomChips button.on{background:#fff;color:#000}
+.zoomChips button:focus-visible{outline:2px solid var(--done);outline-offset:1px}
+/* the summary runs full width under the row */
+.hero{grid-template-columns:minmax(0,1fr)}
+/* Earlier photos: small thumbnails, three to a row */
+.olderTitle{font-size:calc(13px * var(--ts,1));font-weight:600;color:var(--graphite);margin:16px 0 6px}
+body:not(.d-tiny) .older{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:0}
+body:not(.d-tiny) .older img,body:not(.d-tiny) .older .placeholder{aspect-ratio:3/4;border-radius:10px}
+body:not(.d-tiny) .older .text{font-size:11px;-webkit-line-clamp:3;margin:4px 1px 0}
+body:not(.d-tiny) .older .meta{font-size:10px;margin-top:2px}
+body:not(.d-tiny) .older .text.md{max-height:4.6em;overflow:hidden;-webkit-mask-image:linear-gradient(#000 60%,transparent);mask-image:linear-gradient(#000 60%,transparent)}
 /* Layers: modal 10, editor 20, update 30, Settings 50, AI settings 60 (it opens from Settings), toasts 70 */
 #cfgsheet{position:fixed;inset:0;z-index:50;background:var(--paper);color:var(--ink);transform:translateY(102%);visibility:hidden;transition:transform .28s ease,visibility 0s linear .28s;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;text-align:left}
 #cfgsheet.open{transform:none;visibility:visible;transition:transform .28s ease}
@@ -1377,17 +1411,22 @@ body.d-tiny .older article.open img{order:3;width:100%}
   <div id="liveOn" class="hidden">
   <div class="liveGrid">
     <figure class="livePane">
-      <div class="liveWrap" id="liveWrap"><video id="live" class="live" playsinline muted autoplay></video><span class="liveTag">Live</span></div>
-      <div class="liveApple hidden" id="liveApple">Shortcuts takes the photos with Apple Intelligence, so there’s no live preview here.</div>
-      <figcaption>Camera</figcaption>
+      <div class="liveWrap" id="liveWrap"><video id="live" class="live" playsinline muted autoplay></video><span class="liveTag">Live</span>
+        <div class="zoomChips" role="group" aria-label="Zoom"><button type="button" data-z="1" aria-label="Zoom 1x">1×</button><button type="button" data-z="2" aria-label="Zoom 2x">2×</button><button type="button" data-z="3" aria-label="Zoom 3x">3×</button><button type="button" data-z="4" aria-label="Zoom 4x">4×</button></div>
+      </div>
+      <div class="liveApple hidden" id="liveApple">Shortcuts takes the photos, so there’s no live preview.</div>
+      <figcaption>Live</figcaption>
     </figure>
     <figure class="nowPane">
       <div class="nowPhoto" id="nowPhoto"></div>
-      <figcaption id="nowCap">Photo being analyzed</figcaption>
+      <figcaption id="nowCap">Analyzing</figcaption>
+    </figure>
+    <figure class="lastPane">
+      <div class="lastPhoto empty" id="lastPhoto"></div>
+      <figcaption id="lastCap">Analyzed</figcaption>
     </figure>
   </div>
   <section class="hero" aria-label="Latest photo and summary">
-    <div id="heroPhoto"></div>
     <div class="heroSummary" id="heroSummary">
       <div class="scroll">
         <h2 id="summaryTitle">Summary so far</h2>
@@ -1592,6 +1631,7 @@ const PAGE_JS = String.raw`
   wireDebug();
   $("applePhotos").addEventListener("change", () => { cfg.applePhotos = $("applePhotos").checked; persist(); });
   wireZoom();
+  wireZoomChips();
   $("accumulate").addEventListener("change", () => { cfg.accumulate = $("accumulate").checked; persist(); updateModeUI(); });
   updateModeUI();
   $("checkShortcut").addEventListener("change", () => { cfg.checkShortcut = $("checkShortcut").value.trim() || DEFAULTS.checkShortcut; persist(); });
@@ -2340,6 +2380,7 @@ const PAGE_JS = String.raw`
     const z = Math.max(1, Number(cfg.zoom) || 1);
     $("zoom").value = String(z);
     $("zoomVal").textContent = z.toFixed(1) + "\u00D7";
+    syncZoomChips();
     const v = $("live");
     const mirror = cfg.facing === "user" ? "scaleX(-1) " : "";
     v.style.transform = mirror + "scale(" + zoomState.digital + ")";
@@ -2855,7 +2896,7 @@ const PAGE_JS = String.raw`
     const pr = analysisProgress(f);
     o.querySelector(".arc").setAttribute("stroke-dashoffset", String(Math.round(100 - pr.p * 100)));
     o.querySelector(".anlPct").textContent = Math.round(pr.p * 100) + "%";
-    o.querySelector(".anlTxt").textContent = (isApple() && !f.img ? "Taking the photo\u2026 " : "Analyzing\u2026 ") + pr.label;
+    o.querySelector(".anlTxt").textContent = isApple() && !f.img ? "Taking the photo\u2026" : pr.label;
   }
   setInterval(() => { if (S.running) updateAnalysis(); }, 150);
 
@@ -2963,6 +3004,84 @@ const PAGE_JS = String.raw`
     });
   }
 
+  // ── the photo row: Live, Analyzing, Analyzed ──
+  function renderNow() {
+    const f = S.frames[0];
+    const box = $("nowPhoto");
+    box.textContent = "";
+    const pending = f && f.pending ? f : null;
+    box.classList.toggle("busy", !!pending);
+    if (pending) {
+      box.appendChild(photoView(pending));
+      box.appendChild(el("span", "nowBadge num", "#" + pending.idx));
+      box.appendChild(anlOverlay(false));
+      anlPendingIdx = pending.idx;
+      updateAnalysis();
+      $("nowCap").textContent = "Analyzing #" + pending.idx + "\u2026";
+    } else {
+      const w = el("div", "nowWait");
+      w.id = "nowWait";
+      box.appendChild(w);
+      updateNowWait();
+      $("nowCap").textContent = "Analyzing";
+    }
+    renderLast();
+  }
+  function updateNowWait() {
+    const w = $("nowWait");
+    if (!w) return;
+    let big = "", small;
+    if (!S.running) small = "Starts with the session";
+    else if (S.paused) { big = "\u23F8"; small = "Paused"; }
+    else if (S.triggerWaitIdx) { big = "\u2026"; small = "Running triggers"; }
+    else if (S.nextAt) { big = Math.max(0, Math.ceil((S.nextAt - Date.now()) / 1000)) + " s"; small = "to the next photo"; }
+    else { big = "\u2026"; small = "Taking a photo"; }
+    w.innerHTML = (big ? "<b>" + escHTML(big) + "</b>" : "") + escHTML(small);
+  }
+  // The newest analyzed photo: its result is already in the summary below.
+  function renderLast() {
+    const f = S.frames.find((x) => !x.pending) || null;
+    const box = $("lastPhoto");
+    box.textContent = "";
+    box.classList.toggle("empty", !f);
+    if (!f) {
+      box.appendChild(el("div", "nowWait", "No photo analyzed yet"));
+      $("lastCap").textContent = "Analyzed";
+      return;
+    }
+    box.appendChild(photoView(f));
+    box.appendChild(el("span", "nowBadge num", "#" + f.idx));
+    const ok = !f.error;
+    const inSummary = ok && S.summaryAt && S.summaryAt.idx === f.idx;
+    box.appendChild(el("div", "inSum" + (ok ? "" : " bad"), ok ? (inSummary ? "\u2713 In the summary" : "\u2713 Analyzed") : "\u2715 Not analyzed"));
+    if (anlPendingIdx === f.idx || (anlDoneIdx === f.idx && Date.now() - anlDoneAt < 1300)) {
+      if (anlPendingIdx === f.idx) {
+        anlDoneIdx = f.idx; anlDoneAt = Date.now(); anlPendingIdx = 0;
+        box.classList.remove("fresh"); void box.offsetWidth; box.classList.add("fresh");
+      }
+      box.appendChild(anlOverlay(true));
+    }
+    $("lastCap").textContent = "Analyzed #" + f.idx + ", " + f.time;
+  }
+  function wireZoomChips() {
+    document.querySelectorAll(".zoomChips button").forEach((b) => {
+      b.addEventListener("click", () => {
+        const r = $("zoom");
+        r.value = b.dataset.z;
+        r.dispatchEvent(new Event("input"));
+      });
+    });
+    syncZoomChips();
+  }
+  function syncZoomChips() {
+    const z = Number(cfg.zoom) || 1;
+    document.querySelectorAll(".zoomChips button").forEach((b) => {
+      const on = Math.abs(Number(b.dataset.z) - z) < 0.05;
+      b.classList.toggle("on", on);
+      b.setAttribute("aria-pressed", on ? "true" : "false");
+    });
+  }
+
   // ── tabs: Setup, Triggers, Live, Sessions ──
   let currentView = "setup";
   function showView(name) {
@@ -2996,27 +3115,6 @@ const PAGE_JS = String.raw`
   }
 
   // ── Live view: the photo being analyzed, and the countdown to the next one ──
-  function renderNow() {
-    const f = S.frames[0];
-    const box = $("nowPhoto");
-    box.textContent = "";
-    box.classList.toggle("busy", !!(f && f.pending));
-    if (!f) {
-      box.appendChild(el("div", "placeholder", S.running ? "First photo coming\u2026" : "No photo yet"));
-      $("nowCap").textContent = "Photo being analyzed";
-      return;
-    }
-    box.appendChild(photoView(f));
-    box.appendChild(el("span", "nowBadge num", "#" + f.idx + "  " + f.time));
-    if (f.pending) { box.appendChild(anlOverlay(false)); anlPendingIdx = f.idx; updateAnalysis(); }
-    else if (anlPendingIdx === f.idx || (anlDoneIdx === f.idx && Date.now() - anlDoneAt < 1300)) {
-      if (anlPendingIdx === f.idx) { anlDoneIdx = f.idx; anlDoneAt = Date.now(); anlPendingIdx = 0; }
-      box.appendChild(anlOverlay(true));
-    }
-    $("nowCap").textContent = f.pending ? "Analyzing photo #" + f.idx + "\u2026"
-      : f.error ? "Photo #" + f.idx + " wasn\u2019t analyzed"
-      : "Photo #" + f.idx + " analyzed";
-  }
   function renderCountdown() {
     const sub = $("cdSub"), bar = $("cdBar"), fill = $("cdFill");
     let busy = false, width = 0, note = "";
@@ -4093,6 +4191,7 @@ const PAGE_JS = String.raw`
     else if (S.nextAt) setStatus("Next photo in " + Math.max(0, Math.ceil((S.nextAt - Date.now()) / 1000)) + " s");
     else setStatus("Taking a photo\u2026");
     renderCountdown();
+    updateNowWait();
   }
 
   // ── rendering ──
@@ -4136,23 +4235,14 @@ const PAGE_JS = String.raw`
   }
 
   function renderFrames() {
-    const [latest, ...older] = S.frames;
-
-    // The photo the summary was last updated from, small, left of the summary
-    const hp = $("heroPhoto");
-    hp.textContent = "";
-    const finder = el("div", "finder");
-    const src = (S.summaryAt && S.frames.find((f) => f.idx === S.summaryAt.idx)) || S.frames.find((f) => !f.pending) || null;
-    if (src) finder.append(photoView(src), el("i"), el("span", "tag num", "#" + src.idx));
-    else finder.append(el("div", "placeholder", S.running ? "First photo coming\u2026" : "No photo yet"), el("i"));
-    hp.appendChild(finder);
-
     renderNow();
-
-    // The two photos before it
+    // Earlier photos: everything not already in the Analyzing or Analyzed tiles, as small thumbnails.
+    const lastDone = S.frames.find((f) => !f.pending);
+    const older = S.frames.filter((f) => !f.pending && f !== lastDone);
     const box = $("frames");
     box.textContent = "";
     if (older.length) {
+      box.appendChild(el("h2", "olderTitle", "Earlier photos"));
       const row = el("div", "older");
       older.forEach((f) => row.appendChild(frameView(f)));
       box.appendChild(row);

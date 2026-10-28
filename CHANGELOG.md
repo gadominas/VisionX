@@ -2,6 +2,21 @@
 
 All notable changes to VisionX. Generated from `releases.json`; edit that file, not this one.
 
+## 1.14.0 (2026-10-29): Live, analyzing, analyzed: one row
+
+- 🖼️ **Three photos, one row**: Live camera, the photo being analyzed and the last analyzed one, side by side.
+- ✅ **Clearly in the summary**: The last analyzed photo is outlined and marked "In the summary".
+- 🔍 **Zoom buttons on the preview**: Tap 1×, 2×, 3× or 4× right on the live camera.
+
+**Changes**
+
+- Live: one row with the live camera, the photo being analyzed (progress, or a countdown to the next photo) and the last analyzed photo
+- The last analyzed photo is outlined, labelled "✓ In the summary" and glows when a new one arrives
+- 1×, 2×, 3×, 4× zoom buttons on the live preview, in sync with the zoom slider
+- The summary runs full width under the row
+- Earlier photos are small thumbnails, three to a row, without repeating the photos above
+- Shorter progress label (time left) so it fits the smaller tile
+
 ## 1.13.0 (2026-10-28): See the analysis happen
 
 - ⏳ **Analysis progress**: A ring, scan line and time-left estimate on the photo being analyzed.

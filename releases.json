@@ -4,6 +4,37 @@
   "script": "VisionX.js",
   "releases": [
     {
+      "version": "1.14.0",
+      "date": "2026-10-29",
+      "title": "Live, analyzing, analyzed: one row",
+      "highlights": [
+        {
+          "icon": "🖼️",
+          "title": "Three photos, one row",
+          "text": "Live camera, the photo being analyzed and the last analyzed one, side by side."
+        },
+        {
+          "icon": "✅",
+          "title": "Clearly in the summary",
+          "text": "The last analyzed photo is outlined and marked \"In the summary\"."
+        },
+        {
+          "icon": "🔍",
+          "title": "Zoom buttons on the preview",
+          "text": "Tap 1×, 2×, 3× or 4× right on the live camera."
+        }
+      ],
+      "changes": [
+        "Live: one row with the live camera, the photo being analyzed (progress, or a countdown to the next photo) and the last analyzed photo",
+        "The last analyzed photo is outlined, labelled \"✓ In the summary\" and glows when a new one arrives",
+        "1×, 2×, 3×, 4× zoom buttons on the live preview, in sync with the zoom slider",
+        "The summary runs full width under the row",
+        "Earlier photos are small thumbnails, three to a row, without repeating the photos above",
+        "Shorter progress label (time left) so it fits the smaller tile"
+      ],
+      "fixes": []
+    },
+    {
       "version": "1.13.0",
       "date": "2026-10-28",
       "title": "See the analysis happen",
