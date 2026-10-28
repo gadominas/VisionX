@@ -2,6 +2,22 @@
 
 All notable changes to VisionX. Generated from `releases.json`; edit that file, not this one.
 
+## 1.9.0 (2026-10-28): Settings, your way
+
+- 🎨 **Colours and layout**: Six palettes or Auto, plus Compact and a Tiny layout that puts older photos on one line.
+- 🔠 **Text size and font**: Pick Small to Larger text and a rounded or serif headline font.
+- 🎛 **One Settings screen**: AI settings, update checks and capture limits behind the new sliders icon.
+
+**Changes**
+
+- New Settings sheet (sliders icon at the top): Appearance, AI, Updates with Check now, Capture tunables and Built with; changes apply at once
+- Appearance shared with the other apps: Auto plus six palettes (VisionX teal in all), Comfortable, Compact or Tiny layout, four text sizes, rounded or serif headlines
+- Tiny layout: older photos as one line each (number, time and summary); tap one to see it whole
+- Capture limits are adjustable with ranges and Reset: AI request time limit, photos kept on screen, photos kept in Debug
+- AI settings moved from the What to look for panel into Settings; the panel keeps a one-line status
+- Settings are saved in settings.json in iCloud Drive › Scriptable › VisionX; presets, triggers and session choices stay in vision-session.json
+- Built with: the blueprints this app follows, with links to read them
+
 ## 1.8.0 (2026-10-28): Claude joins OpenAI and Apple Intelligence
 
 - 🤖 **Claude or OpenAI**: Photo analysis, triggers and refining now work with either provider. Switch any time in AI settings.
