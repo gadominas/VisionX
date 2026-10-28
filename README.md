@@ -1,6 +1,6 @@
 # VisionX
 
-**Your iPhone as a smart camera, built with [Scriptable](https://scriptable.app).** VisionX takes a photo every few seconds, has an AI model (OpenAI or Apple Intelligence) look at it with your own instructions, and keeps a live summary of what it sees. When something you care about happens, it runs an Apple Shortcut, so it can open a gate, send a notification or switch on a light.
+**Your iPhone as a smart camera, built with [Scriptable](https://scriptable.app).** VisionX takes a photo every few seconds, has an AI model (Claude, OpenAI or Apple Intelligence) look at it with your own instructions, and keeps a live summary of what it sees. When something you care about happens, it runs an Apple Shortcut, so it can open a gate, send a notification or switch on a light.
 
 <p align="center">
   <img src="docs/screenshots/gate.png" width="200" alt="A car at the gate: the plate is read and the Open Gate shortcut runs">
@@ -18,7 +18,7 @@
    const code = await new Request("https://raw.githubusercontent.com/gadominas/VisionX/main/install.js").loadString();
    await eval("(async () => {" + code + "\n})()");
    ```
-3. Tap **Open VisionX**. On first run, paste an OpenAI API key (kept in the iOS Keychain) or choose **Use Apple Intelligence only**. You can change the key later in the app.
+3. Tap **Open VisionX**. Apple Intelligence works straight away. To use Claude or OpenAI, open **Settings › AI settings** and add your own key (typed into a native iOS prompt and kept in the iOS Keychain).
 
 **Update:** run *VisionX Installer* again. Presets, triggers and settings are kept.
 
@@ -35,7 +35,7 @@
 - **Triggers.** A trigger has a plain-language condition, such as "A car with plate KXA 482 is at the gate", and a shortcut to run. When the model says the condition is met, the shortcut runs and receives the capture summary or your own message. Live rows show which triggers are waiting, checking or have fired, and each one can be switched on or off at any time.
 - **Debug log.** The last 10 photos are kept in memory with exactly what was sent (instructions, context, request settings) and what came back, both as received and as understood, plus any trigger checks. JSON is syntax-highlighted, and **Copy as JSON** copies the log without the photos.
 - **Session stats.** At the end you see the duration, photos taken, requests sent, tokens used, and how many times each trigger fired.
-- **OpenAI or Apple Intelligence.** Use any image-capable OpenAI model from your account, or Apple Intelligence through Shortcuts with no API key.
+- **Claude, OpenAI or Apple Intelligence.** Pick any model your Claude or OpenAI key can use in **AI settings**, test the connection and see your token usage per day, feature and model. Or use Apple Intelligence through Shortcuts with no API key.
 
 ## Use cases
 
@@ -60,7 +60,7 @@
 ## How to use it
 
 1. Open **What to look for**, write your instructions (or pick a preset) and set how often to take a photo.
-2. Choose **Analyze with**: OpenAI (pick a model) or Apple Intelligence.
+2. Choose **Analyze with**: the Claude or OpenAI model set in **AI settings**, or Apple Intelligence.
 3. Optional: open **Triggers** and add one or more.
 4. Tap **Start session**, then **End session** to see the stats.
 
@@ -132,13 +132,13 @@ The full history is in [CHANGELOG.md](CHANGELOG.md). Versions before 1.7.0 can't
 ## Privacy
 
 - Photos are kept in memory only: the last three on screen and the last ten in the debug log. They are never written to disk or Photos, and they're cleared when a new session starts.
-- Each photo is sent to the model you choose, either OpenAI or Apple's Private Cloud Compute. OpenAI requests are sent with `store: false`.
-- The OpenAI API key stays in the iOS Keychain.
+- Each photo is sent to the model you choose: Claude, OpenAI or Apple's Private Cloud Compute.
+- Claude and OpenAI keys stay in the iOS Keychain and are only sent to their own provider. The app's page never receives them.
 - Presets, triggers and settings are saved in Scriptable's local Documents folder as `vision-session.json`.
 
 ## Notes
 
-- OpenAI calls go through Scriptable's native networking, using the Responses API. If a model rejects an optional setting, VisionX drops it and retries.
-- Token counts are shown for OpenAI. Apple doesn't report them.
+- Claude and OpenAI calls go through Scriptable's native networking and one shared AI call, set up like the other apps (see [app-blueprints](https://github.com/gadominas/app-blueprints) and [docs/BLUEPRINTS.md](docs/BLUEPRINTS.md)).
+- Token counts are shown for Claude and OpenAI, per session and in **AI settings › Token usage**. Apple doesn't report them.
 - Apple Intelligence is asked for a simple labelled reply (FRAME, SUMMARY, STATE). VisionX also reads JSON, fenced JSON and bold labels, and if a reply can't be read at all, it's shown as the summary rather than leaving it empty.
 - How well it reads plates, counts and judges conditions depends on the model, the light and the camera angle. Test a setup before relying on it.

@@ -3,11 +3,11 @@
 // icon-color: red; icon-glyph: camera;
 
 /*
-  VisionX — timed photo capture + AI analysis (OpenAI or Apple Intelligence).
+  VisionX — timed photo capture + AI analysis (Claude, OpenAI or Apple Intelligence).
   https://github.com/gadominas/VisionX
 
   • Takes a photo every N seconds from the live camera (no taps needed).
-  • Sends each photo + your custom instructions + the accumulated state to OpenAI.
+  • Sends each photo + your custom instructions + the accumulated state to Claude or OpenAI.
   • The model merges each frame into a cumulative result for the whole session.
   • Shows the latest photo large and the two before it small (last 3 only).
   • Photos live only in memory and are never written to disk or Photos.
@@ -16,22 +16,19 @@
   Apple Intelligence runs through a Shortcut (Scriptable has no direct access);
   setup steps are in the app under "Analyze with".
 
-  Settings (instructions, interval, model…) are edited inside the app UI.
+  Settings (instructions, interval, photo size…) are edited inside the app UI.
   VisionX checks GitHub for new versions when it opens (see CHECK_UPDATES).
-  The API key is stored in the iOS Keychain. Change or remove it in the app
-  with "Change API key" (RESET_API_KEY = true also re-asks at launch).
+  Claude and OpenAI keys, models and token usage live under Settings › AI settings
+  (github.com/gadominas/app-blueprints · ai-configuration). Keys stay in the iOS Keychain.
 */
 
-const RESET_API_KEY = false;
-const KEYCHAIN_KEY = "vision_session_openai_key";
-const DEFAULT_MODEL = "gpt-4.1-mini";
 const DEFAULT_SHORTCUT = "Vision Session AI";
 const STORE_FILE = "vision-session.json"; // presets + settings, in Scriptable's local Documents
 
 // ───────── Version and in-app updates ─────────
 // This build's version. When releasing, bump it and add a matching entry to releases.json.
 // Keep these two lines exactly in this form (single quotes): the updater reads them from downloads.
-const VERSION = '1.7.0';
+const VERSION = '1.8.0';
 const APP_ID = 'visionx';   // unique per app, never changes
 const REPO_RAW = 'https://raw.githubusercontent.com/gadominas/VisionX/main/';
 const SCRIPT_FILE = 'VisionX.js';   // the script's file name in the repository
@@ -144,59 +141,237 @@ async function saveOnClose(wv) {
   }
 }
 
-const SKIP_KEY = KEYCHAIN_KEY + "_skipped";
+// ─────────────── AI configuration ───────────────
+// Follows github.com/gadominas/app-blueprints · blueprints/ai-configuration.md (reference: BlogPulse.js).
+// Every AI request goes through aiCall. Keys live in the iOS Keychain only; the page sees them masked.
 
-// Returns the key, "" when the user chose Apple Intelligence only, or null to quit.
-async function getApiKey(forcePrompt) {
-  if (!forcePrompt && Keychain.contains(KEYCHAIN_KEY)) return Keychain.get(KEYCHAIN_KEY);
-  if (!forcePrompt && Keychain.contains(SKIP_KEY)) return "";
-  const a = new Alert();
-  a.title = "OpenAI API key";
-  a.message = "Saved in the iOS Keychain on this device only. You can skip it and use Apple Intelligence instead.";
-  a.addSecureTextField("sk-…", "");
-  a.addAction("Save");
-  a.addAction("Use Apple Intelligence only");
-  a.addCancelAction("Cancel");
-  const choice = await a.present();
-  if (choice === -1) return null;
-  if (choice === 1) { Keychain.set(SKIP_KEY, "1"); return ""; }
-  const key = a.textFieldValue(0).trim();
-  if (!key) return null;
-  Keychain.set(KEYCHAIN_KEY, key);
-  if (Keychain.contains(SKIP_KEY)) Keychain.remove(SKIP_KEY);
-  return key;
+// AI providers. Keychain names are unique per app; models are defaults until the user picks one.
+const AI = {
+  anthropic: { key: "VISIONX_ANTHROPIC_KEY", model: "claude-haiku-5-5" },
+  openai:    { key: "VISIONX_OPENAI_KEY",    model: "gpt-4.1-mini" },
+};
+const PROVIDERS = { anthropic: "Claude", openai: "OpenAI" };
+
+// AI settings and token usage live in their own small JSON files on this iPhone (never the keys).
+const aiFm = FileManager.local();
+const aiPath = name => aiFm.joinPath(aiFm.documentsDirectory(), "visionx-" + name + ".json");
+function aiLoad(name, fallback) {
+  try { const p = aiPath(name); if (aiFm.fileExists(p)) return JSON.parse(aiFm.readString(p)); }
+  catch (e) { console.log("AI: couldn't read " + name + ": " + e); }
+  return fallback;
 }
+function aiWrite(name, data) {
+  try { aiFm.writeString(aiPath(name), JSON.stringify(data)); } catch (e) { console.log("AI: couldn't save " + name + ": " + e); }
+}
+const aiSettings = Object.assign({
+  aiProvider: "anthropic",   // the provider marked "In use"
+  ai: true,                  // background AI jobs on/off ("What AI does")
+  // model:  { anthropic: "…", openai: "…" }   set when the user picks a model
+  // models: { anthropic: { at, list: [{ id, name }] }, openai: … }   cached model lists
+}, aiLoad("ai-settings", {}));
+const saveAiSettings = () => aiWrite("ai-settings", aiSettings);
 
-// Asked from the page ("Change API key"): replace or remove the saved key.
-async function changeApiKey(ctx) {
-  const a = new Alert();
-  a.title = "OpenAI API key";
-  a.message = ctx.apiKey
-    ? "The saved key ends in \u2026" + ctx.apiKey.slice(-4) + ". Paste a new key to replace it."
-    : "Paste your key. It's saved in the iOS Keychain on this device only.";
-  a.addSecureTextField("sk-…", "");
-  a.addAction("Save");
-  if (ctx.apiKey) a.addDestructiveAction("Remove saved key");
-  a.addCancelAction("Cancel");
-  const choice = await a.present();
-  if (choice === -1) return { cancelled: true };
-  if (choice === 1) {
-    Keychain.remove(KEYCHAIN_KEY);
-    Keychain.set(SKIP_KEY, "1");
-    ctx.apiKey = "";
-  } else {
-    const key = a.textFieldValue(0).trim();
-    if (!key) return { cancelled: true };
-    Keychain.set(KEYCHAIN_KEY, key);
-    if (Keychain.contains(SKIP_KEY)) Keychain.remove(SKIP_KEY);
-    ctx.apiKey = key;
+const keyFor   = p => Keychain.contains(AI[p].key) ? Keychain.get(AI[p].key) : null;
+const aiKey    = () => keyFor(aiSettings.aiProvider);   // the key of the provider in use
+const modelFor = p => (aiSettings.model && aiSettings.model[p]) || AI[p].model;
+const maskKey  = k => k ? (k.length > 14 ? k.slice(0, 7) + "…" + k.slice(-4) : "…" + k.slice(-4)) : null;
+
+// Run once at start: move a key an earlier version stored elsewhere, then use whichever provider has a key.
+function aiMigrate(oldKeyNames, oldModel) {
+  for (const old of oldKeyNames || []) {
+    if (!Keychain.contains(old)) continue;
+    if (!Keychain.contains(AI.openai.key)) Keychain.set(AI.openai.key, Keychain.get(old));
+    Keychain.remove(old);
+    if (!keyFor("anthropic")) aiSettings.aiProvider = "openai";   // use the key that now exists
   }
-  return accountInfo(ctx);
+  if (oldModel && !(aiSettings.model && aiSettings.model.openai)) aiSettings.model = Object.assign({}, aiSettings.model, { openai: oldModel });
+  if (!PROVIDERS[aiSettings.aiProvider]) aiSettings.aiProvider = "anthropic";
+  if (!aiKey()) { const other = Object.keys(PROVIDERS).find(p => keyFor(p)); if (other) aiSettings.aiProvider = other; }
+  saveAiSettings();
 }
 
-async function accountInfo(ctx) {
-  const m = ctx.apiKey ? await fetchModels(ctx.apiKey) : { models: [], status: 0, total: 0, error: null };
-  return { hasKey: !!ctx.apiKey, apiKey: ctx.apiKey, models: m.models, error: m.error, status: m.status, total: m.total };
+async function askKey(p) {
+  const cur = keyFor(p);
+  const al = new Alert();
+  al.title = `${PROVIDERS[p]} API key`;
+  al.message = cur ? `The saved key ends in …${cur.slice(-4)}. Paste a new key to replace it.`
+                   : "Paste your API key. It's stored in the iOS Keychain on this device only.";
+  al.addSecureTextField(p === "openai" ? "sk-…" : "sk-ant-…", "");
+  al.addAction("Save key");
+  al.addCancelAction("Cancel");
+  if (await al.present() !== 0) return false;
+  const v = al.textFieldValue(0).trim();
+  if (!v) return false;
+  Keychain.set(AI[p].key, v);
+  if (!aiKey()) aiSettings.aiProvider = p;   // first key saved: use that provider
+  return true;
+}
+
+function removeKey(p) {
+  if (Keychain.contains(AI[p].key)) Keychain.remove(AI[p].key);
+}
+
+// The only way the app calls AI. feature: a short tag for the usage table.
+// provider: defaults to the one in use; "Test connection" passes the card's provider.
+// images: optional photos sent with the user text, as base64 strings (JPEG) or { data, type, detail } (VisionX analyses photos).
+// aiCall.last holds this call's input and output tokens, for VisionX's per-session totals.
+async function aiCall(system, user, maxTokens = 2500, feature = "other", provider = aiSettings.aiProvider, images = []) {
+  const key = keyFor(provider);
+  if (!key) throw new Error(`No ${PROVIDERS[provider]} key saved`);
+  const openai = provider === "openai", model = modelFor(provider);
+  const r = new Request(openai ? "https://api.openai.com/v1/chat/completions" : "https://api.anthropic.com/v1/messages");
+  r.method = "POST";
+  r.timeoutInterval = 90;
+  const imgs = images.map(i => typeof i === "string" ? { data: i } : i);
+  const oaUser = imgs.length ? [{ type: "text", text: user }].concat(imgs.map(i => ({ type: "image_url", image_url: Object.assign({ url: `data:${i.type || "image/jpeg"};base64,${i.data}` }, i.detail ? { detail: i.detail } : {}) }))) : user;
+  const anUser = imgs.length ? imgs.map(i => ({ type: "image", source: { type: "base64", media_type: i.type || "image/jpeg", data: i.data } })).concat([{ type: "text", text: user }]) : user;
+  if (openai) {
+    r.headers = { "Authorization": "Bearer " + key, "Content-Type": "application/json" };
+    r.body = JSON.stringify({ model, messages: [{ role: "system", content: system }, { role: "user", content: oaUser }] });
+  } else {
+    r.headers = { "x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json" };
+    r.body = JSON.stringify({ model, max_tokens: maxTokens, system, messages: [{ role: "user", content: anUser }] });
+  }
+  const j = await r.loadJSON();
+  if (j.error) throw new Error(j.error.message || "AI request failed");
+  const u = j.usage || {};
+  recordUsage(provider, model, feature,
+    openai ? (u.prompt_tokens || 0) : (u.input_tokens || 0) + (u.cache_creation_input_tokens || 0) + (u.cache_read_input_tokens || 0),
+    openai ? (u.completion_tokens || 0) : (u.output_tokens || 0));
+  aiCall.last = openai ? { in: u.prompt_tokens || 0, out: u.completion_tokens || 0 }
+    : { in: (u.input_tokens || 0) + (u.cache_creation_input_tokens || 0) + (u.cache_read_input_tokens || 0), out: u.output_tokens || 0 };
+  return openai ? ((j.choices && j.choices[0] && j.choices[0].message.content) || "")
+                : (j.content || []).map(c => c.text || "").join("");
+}
+
+// For prompts that ask for JSON: tolerate code fences and stray text around it.
+function parseJSON(txt) {
+  const s = String(txt).replace(/```json|```/g, "").trim();
+  const a = s.search(/[\[{]/), b = Math.max(s.lastIndexOf("}"), s.lastIndexOf("]"));
+  return JSON.parse(s.slice(a, b + 1));
+}
+
+// Token usage, counted from what the provider reports, per provider, model, feature and local day.
+let usage = aiLoad("usage", { since: Date.now(), p: {} });
+const aiDayKey = (d = new Date()) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+function recordUsage(provider, model, feature, tin, tout) {
+  const P = usage.p[provider] = usage.p[provider] || { calls: 0, in: 0, out: 0, models: {}, features: {}, days: {} };
+  const b = (o, k) => o[k] = o[k] || { calls: 0, in: 0, out: 0 };
+  for (const x of [P, b(P.models, model), b(P.features, feature), b(P.days, aiDayKey())]) {
+    x.calls++; x.in += tin; x.out += tout;
+  }
+  const days = Object.keys(P.days).sort();
+  while (days.length > 400) delete P.days[days.shift()];   // keep about 13 months of days
+  aiWrite("usage", usage);   // save after every call: the app can be closed at any moment
+}
+
+function resetUsage() { usage = { since: Date.now(), p: {} }; aiWrite("usage", usage); }
+
+// The models the user's own key can call, newest first; cached so the menu works offline.
+async function fetchModels(p) {
+  const key = keyFor(p);
+  if (!key) throw new Error(`Add a ${PROVIDERS[p]} key first`);
+  const r = new Request(p === "openai" ? "https://api.openai.com/v1/models" : "https://api.anthropic.com/v1/models?limit=100");
+  r.headers = p === "openai" ? { "Authorization": "Bearer " + key } : { "x-api-key": key, "anthropic-version": "2023-06-01" };
+  r.timeoutInterval = 20;
+  const j = await r.loadJSON();
+  if (j.error) throw new Error(j.error.message || "Couldn't load models");
+  let list = (j.data || []).map(m => ({
+    id: m.id, name: m.display_name || m.id,
+    t: m.created_at ? Date.parse(m.created_at) : (m.created || 0) * 1000,
+  }));
+  // OpenAI lists every model the key can reach; keep only the ones that write text.
+  if (p === "openai") list = list.filter(m => /^(gpt-|o\d|chatgpt-)/.test(m.id)
+    && !/(audio|realtime|tts|transcribe|image|search|embedding|instruct|moderation)/.test(m.id));
+  list.sort((a, b) => b.t - a.t);
+  aiSettings.models = aiSettings.models || {};
+  aiSettings.models[p] = { at: Date.now(), list: list.map(m => ({ id: m.id, name: m.name })) };
+  saveAiSettings();
+  return list.length;
+}
+
+// Bridge actions from the AI settings sheet. Returns the toast to show ("" for none).
+const AI_ACTIONS = ["aistate", "aikey", "airm", "aiprov", "aimodels", "aimodel", "aitest", "usagereset", "aitoggle"];
+async function aiAction(head, m) {
+  const P = PROVIDERS[m.v] ? m.v : aiSettings.aiProvider;
+  let msg = "";
+  switch (head) {
+    case "aikey":
+      if (await askKey(P)) {
+        aiSettings.ai = true; saveAiSettings();
+        try { const n = await fetchModels(P); msg = `${PROVIDERS[P]} key saved — ${n} models available`; }
+        catch (e) { msg = `Key saved, but checking it failed: ${String(e.message || e).slice(0, 70)}`; }
+      }
+      break;
+    case "airm": removeKey(P); msg = `${PROVIDERS[P]} key removed`;
+      if (!aiKey()) { const other = Object.keys(PROVIDERS).find(p => keyFor(p)); if (other) aiSettings.aiProvider = other; }
+      break;
+    case "aiprov": if (PROVIDERS[m.v] && keyFor(m.v)) aiSettings.aiProvider = m.v; break;
+    case "aimodels":
+      try { const n = await fetchModels(P); msg = `${n} ${PROVIDERS[P]} models found`; }
+      catch (e) { msg = String(e.message || e).slice(0, 90); }
+      break;
+    case "aimodel":
+      if (PROVIDERS[m.p] && m.v) { aiSettings.model = aiSettings.model || {}; aiSettings.model[m.p] = m.v; msg = `${PROVIDERS[m.p]} now uses ${m.v}`; }
+      break;
+    case "aitest": {
+      const t0 = Date.now();
+      try {
+        await aiCall("Reply with the single word OK.", "Connection test.", 10, "test", P);
+        msg = `${PROVIDERS[P]} works — ${modelFor(P)} answered in ${((Date.now() - t0) / 1000).toFixed(1)} s`;
+      } catch (e) { msg = `${PROVIDERS[P]} test failed: ${String(e.message || e).slice(0, 80)}`; }
+      break;
+    }
+    case "usagereset": resetUsage(); msg = "Usage counters reset"; break;
+    case "aitoggle": aiSettings.ai = !aiSettings.ai; break;
+  }
+  saveAiSettings();
+  return msg;
+}
+
+// What the page gets. Keys appear only masked.
+function aiClientState() {
+  return {
+    provider: aiSettings.aiProvider,
+    keys:  Object.fromEntries(Object.keys(PROVIDERS).map(p => [p, maskKey(keyFor(p))])),
+    model: Object.fromEntries(Object.keys(PROVIDERS).map(p => [p, modelFor(p)])),
+    models: aiSettings.models || {}, usage, today: aiDayKey(),
+    ai: aiSettings.ai, hasKey: !!aiKey(),
+  };
+}
+// One-line status for the app's Settings row: "Claude — claude-haiku-5-5 — 12.4k tokens used".
+function aiStatusLine() {
+  if (!aiKey()) return "";
+  const P = usage.p[aiSettings.aiProvider];
+  return `${PROVIDERS[aiSettings.aiProvider]} — ${modelFor(aiSettings.aiProvider)}` +
+    (P && P.calls ? ` — ${aiFmtN(P.in + P.out)} tokens used` : "");
+}
+const aiFmtN = n => n >= 1e6 ? (n / 1e6).toFixed(2) + "M" : n >= 1e4 ? Math.round(n / 1e3) + "k" : n >= 1e3 ? (n / 1e3).toFixed(1) + "k" : String(n);
+// ─────────────── end of AI configuration ───────────────
+
+// Photo analysis, instruction refining and trigger checks all come here from the page.
+// p: { system, text, image (data URL), detail, maxTokens, feature }
+async function visionAI(p) {
+  if (!aiKey()) {
+    const e = new Error("no Claude or OpenAI key is saved. Add one in Settings › AI settings, or use Apple Intelligence");
+    e.fatal = true;
+    throw e;
+  }
+  const provider = aiSettings.aiProvider, model = modelFor(provider);
+  const m = /^data:(image\/[a-z]+);base64,/.exec(String(p.image || ""));
+  const images = p.image ? [{ data: String(p.image).slice(m ? m[0].length : 0), type: m ? m[1] : "image/jpeg", detail: p.detail }] : [];
+  try {
+    const text = await aiCall(p.system || "Follow the user's instructions exactly.", String(p.text || ""), p.maxTokens || 2000, p.feature || "other", provider, images);
+    const u = aiCall.last || { in: 0, out: 0 };
+    return { text, by: PROVIDERS[provider], model, usage: { prompt_tokens: u.in, completion_tokens: u.out, total_tokens: u.in + u.out } };
+  } catch (e) {
+    const err = new Error(String((e && e.message) || e));
+    // A bad key, a missing model or no credit won't fix itself: stop the session instead of retrying every photo.
+    err.fatal = /api.?key|authenticat|permission|not.?found|does not exist|quota|credit balance|billing/i.test(err.message);
+    throw err;
+  }
 }
 
 // ───────── Bridge: the page asks Scriptable to make calls on its behalf ─────────
@@ -222,9 +397,13 @@ async function handleBridgeCall(wv, ctx, id) {
     if (!raw) return;
     const msg = JSON.parse(raw);
     let result;
-    if (msg.type === "openai") result = await callOpenAI(ctx.apiKey, msg.payload);
-    else if (msg.type === "changeKey") result = await changeApiKey(ctx);
-    else if (msg.type === "models") result = await accountInfo(ctx);
+    if (msg.type === "ai") result = await visionAI(msg.payload || {});
+    else if (AI_ACTIONS.includes(msg.type)) {   // AI settings sheet (app-blueprints · ai-configuration)
+      const t = await aiAction(msg.type, msg.payload || {});
+      await wv.evaluateJavaScript("window.__aiState(" + JSON.stringify(aiClientState()) + "); 'ok'").catch(() => {});
+      if (t) await wv.evaluateJavaScript("window.__aiToast(" + JSON.stringify(t) + "); 'ok'").catch(() => {});
+      result = true;
+    }
     else if (msg.type === "apple") result = await runAppleShortcut(msg.payload);
     else if (msg.type === "appleText") result = (await runShortcutText(msg.payload.shortcut, msg.payload.text)).text;
     else if (msg.type === "runShortcut") result = await runShortcutText(msg.payload.shortcut, msg.payload.text);
@@ -247,23 +426,6 @@ async function handleBridgeCall(wv, ctx, id) {
   } catch (e) {
     console.warn("Bridge reply failed: " + e);
   }
-}
-
-async function callOpenAI(apiKey, body) {
-  if (!apiKey) {
-    const e = new Error("no OpenAI API key is saved. Tap Change API key to add one");
-    e.fatal = true;
-    throw e;
-  }
-  const r = new Request("https://api.openai.com/v1/responses");
-  r.method = "POST";
-  r.headers = { "Content-Type": "application/json", Authorization: "Bearer " + apiKey };
-  r.body = JSON.stringify(body);
-  r.timeoutInterval = 90;
-  const text = await r.loadString();
-  let data = null;
-  try { data = JSON.parse(text); } catch (_) {}
-  return { status: r.response.statusCode, data, raw: data ? null : String(text || "").slice(0, 300) };
 }
 
 // Runs any shortcut with text as its input and returns its text output (if any).
@@ -310,45 +472,16 @@ async function runAppleShortcut(p) {
   return { text, photo };
 }
 
-// Only models that clearly can't do this job are hidden: non-chat models (speech,
-// embeddings, image generation…), tool-only models and old text-only ones.
-const NOT_FOR_THIS = /(embedding|tts|whisper|dall-e|gpt-image|chatgpt-image|sora|moderation|transcribe|realtime|audio|davinci|babbage|codex|computer-use|deep-research|search|-pro\b|gpt-3\.5|instruct|^gpt-4-0|^gpt-4$|o1-mini|o1-preview|o3-mini)/i;
-
-async function fetchModels(apiKey) {
-  try {
-    const r = new Request("https://api.openai.com/v1/models");
-    r.headers = { Authorization: "Bearer " + apiKey };
-    r.timeoutInterval = 15;
-    const j = await r.loadJSON();
-    const status = r.response.statusCode;
-    if (status !== 200) {
-      return { models: [], status, total: 0, error: (j && j.error && j.error.message) || "HTTP " + status };
-    }
-    const all = j.data || [];
-    const models = all
-      .filter((m) => /^(gpt-|chatgpt-|o\d)/i.test(m.id) && !NOT_FOR_THIS.test(m.id))
-      .sort((a, b) => (b.created || 0) - (a.created || 0)) // newest first
-      .map((m) => m.id);
-    return { models, status, total: all.length, error: null };
-  } catch (e) {
-    return { models: [], status: 0, total: 0, error: String((e && e.message) || e) };
-  }
-}
-
 async function main() {
-  const apiKey = await getApiKey(RESET_API_KEY);
-  if (apiKey === null) return;
-  const ctx = { apiKey };
-  const m = apiKey ? await fetchModels(apiKey) : { models: [], status: 0, total: 0, error: null };
+  // 1.7.x kept one OpenAI key (or a "use Apple Intelligence only" choice) under other names.
+  aiMigrate(["vision_session_openai_key"], null);
+  if (Keychain.contains("vision_session_openai_key_skipped")) Keychain.remove("vision_session_openai_key_skipped");
+  const ctx = {};
+  // The page never gets a key: only whether one is saved, and which provider and model are in use.
   const boot = {
-    apiKey,
-    defaultModel: DEFAULT_MODEL,
+    ai: { hasKey: !!aiKey(), name: PROVIDERS[aiSettings.aiProvider], model: modelFor(aiSettings.aiProvider) },
     defaultShortcut: DEFAULT_SHORTCUT,
     version: VERSION,
-    models: m.models,
-    modelsError: m.error,
-    modelsStatus: m.status,
-    modelsTotal: m.total,
     store: readStore(),
   };
   const wv = new WebView();
@@ -575,6 +708,53 @@ details.dbg{border:1px solid var(--rule);border-radius:10px;background:var(--sur
 .dbgPhoto{display:block;max-width:100%;max-height:40vh;border-radius:6px;margin-top:4px}
 details.dbgCheck{margin-top:10px;border-top:1px solid var(--rule);padding-top:6px}
 details.dbgCheck>summary{font-size:13px;cursor:pointer}
+#aisheet{--ai-paper:var(--paper);--ai-sheet:var(--surface);--ai-rule:var(--rule);--ai-ink:var(--ink);--ai-muted:var(--graphite);--ai-signal:var(--done);--ai-wash:color-mix(in srgb,var(--ai-signal) 14%,transparent);--ai-danger:var(--rec);
+  position:fixed;inset:0;z-index:40;background:var(--ai-paper);color:var(--ai-ink);transform:translateY(102%);visibility:hidden;transition:transform .28s ease,visibility 0s linear .28s;overflow-y:auto;-webkit-overflow-scrolling:touch;font:15px/1.4 -apple-system,system-ui,sans-serif;text-align:left}
+#aisheet.open{transform:none;visibility:visible;transition:transform .28s ease}
+#aisheet *{box-sizing:border-box}
+#aisheet button{font:inherit;color:inherit;background:none;border:0;margin:0;padding:0;cursor:pointer;-webkit-appearance:none;appearance:none;touch-action:manipulation}
+#aisheet .sh-head{position:sticky;top:0;z-index:1;display:flex;align-items:center;justify-content:space-between;padding:calc(10px + env(safe-area-inset-top,0px)) 16px 10px;background:var(--ai-paper);border-bottom:1px solid var(--ai-rule)}
+#aisheet .sh-head h2{margin:0;font-size:22px;font-weight:700}
+#aisheet .sh-body{padding:4px 16px calc(28px + env(safe-area-inset-bottom,0px));max-width:680px;margin:0 auto}
+#aisheet .link{color:var(--ai-signal);font-weight:600;font-size:17px;padding:8px 0 8px 12px}
+#aisheet .hint{font-size:14px;color:var(--ai-muted);margin:12px 0 0}
+#aisheet .muted{color:var(--ai-muted)} #aisheet .small{font-size:13px} #aisheet .pad{padding:4px 0 8px;margin:0}
+#aisheet .note{font-size:12.5px;color:var(--ai-muted);margin:6px 0 0}
+#aisheet .sec{font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ai-muted);margin:24px 0 8px}
+#aisheet .sm{font-size:14px;font-weight:600;padding:8px 12px;border-radius:9px;border:1px solid var(--ai-rule);background:var(--ai-sheet);color:var(--ai-ink)}
+#aisheet .sm.primary{background:var(--ai-signal);border-color:var(--ai-signal);color:#fff}
+#aisheet .srow{display:flex;align-items:center;gap:12px;background:var(--ai-sheet);border:1px solid var(--ai-rule);border-radius:14px;padding:12px 14px;margin:8px 0}
+#aisheet .grow{flex:1;min-width:0} #aisheet .grow b{display:block;font-weight:600} #aisheet .grow small{display:block;font-size:13px;margin-top:2px}
+#aisheet .switch{flex:none;width:51px;height:31px;border-radius:16px;background:var(--ai-rule);position:relative;transition:background .2s}
+#aisheet .switch::after{content:"";position:absolute;top:2px;left:2px;width:27px;height:27px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.3);transition:transform .2s}
+#aisheet .switch.on{background:var(--ai-signal)} #aisheet .switch.on::after{transform:translateX(20px)}
+#aisheet .aicard,#aisheet .ucard{background:var(--ai-sheet);border:1px solid var(--ai-rule);border-radius:14px;padding:14px;margin:14px 0}
+#aisheet .aicard.active{border-color:var(--ai-signal);box-shadow:0 0 0 1px var(--ai-signal)}
+#aisheet .aic-h{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:17px}
+#aisheet .aic-row{display:flex;align-items:center;gap:10px;margin-top:10px;font-size:14px}
+#aisheet .aic-row.lbl,#aisheet .aic-row .lbl{font-weight:600}
+#aisheet code{font:13px ui-monospace,Menlo,monospace;background:var(--ai-paper);border:1px solid var(--ai-rule);border-radius:6px;padding:2px 6px}
+#aisheet .aic-btns{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:10px}
+#aisheet .sm[disabled]{opacity:.5}
+#aisheet .modelsel{display:block;width:100%;margin-top:6px;font:16px -apple-system,system-ui,sans-serif;color:var(--ai-ink);background:var(--ai-paper);border:1px solid var(--ai-rule);border-radius:9px;padding:9px 10px}
+#aisheet .danger{color:var(--ai-danger)} #aisheet .danger.armed{background:var(--ai-danger);color:#fff;border-color:var(--ai-danger)}
+#aisheet .ustat{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:10px 0 4px}
+#aisheet .ustat div{background:var(--ai-paper);border-radius:10px;padding:8px 10px}
+#aisheet .ustat b{display:block;font-size:20px;font-weight:700}
+#aisheet .ustat small{color:var(--ai-muted);font-size:12px}
+#aisheet .ubars{display:flex;align-items:flex-end;gap:3px;height:56px;margin-top:10px}
+#aisheet .ubars span{flex:1;background:var(--ai-signal);border-radius:3px 3px 0 0;min-height:2px}
+#aisheet .ubars span.zero{background:var(--ai-rule)}
+#aisheet .ubars-l{display:flex;justify-content:space-between;font-size:11.5px;color:var(--ai-muted);margin-top:4px}
+#aisheet .utab{width:100%;border-collapse:collapse;margin-top:12px;font-size:13px}
+#aisheet .utab th{text-align:left;font-weight:600;color:var(--ai-muted);padding:4px 4px 4px 0;border-bottom:1px solid var(--ai-rule)}
+#aisheet .utab td{padding:6px 4px 6px 0;border-bottom:1px solid var(--ai-rule);word-break:break-word}
+#aisheet .utab th:not(:first-child),#aisheet .utab td:not(:first-child){text-align:right;white-space:nowrap}
+#aitoast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom,0px));z-index:41;transform:translate(-50%,20px);opacity:0;visibility:hidden;max-width:90vw;padding:10px 16px;border-radius:18px;background:var(--ink);color:var(--paper);font:14px/1.35 -apple-system,system-ui,sans-serif;text-align:center;pointer-events:none;transition:transform .25s,opacity .25s,visibility 0s linear .25s}
+#aitoast.on{transform:translate(-50%,0);opacity:1;visibility:visible;transition:transform .25s,opacity .25s}
+.badge-ai{display:inline-block;font-size:12px;font-weight:700;color:var(--done);background:color-mix(in srgb,var(--done) 14%,transparent);border-radius:6px;padding:2px 8px}
+.badge-ex{display:inline-block;font-size:12px;font-weight:600;color:var(--graphite);border:1px dashed var(--graphite);border-radius:6px;padding:1px 8px}
+#summaryBy{margin:2px 0 6px}
 #upd{position:fixed;inset:0;z-index:30;background:rgba(0,0,0,.55);display:flex;align-items:flex-end;justify-content:center}
 .updp{width:100%;max-width:720px;max-height:92vh;overflow:auto;background:var(--surface);color:var(--ink);border-radius:22px 22px 0 0;padding:20px 18px calc(16px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:8px}
 .updp:focus{outline:none}
@@ -636,7 +816,7 @@ details.dbgCheck>summary{font-size:13px;cursor:pointer}
     <div class="hint" id="accHint"></div>
     <label for="engine">Analyze with</label>
     <select id="engine">
-      <option value="openai">OpenAI</option>
+      <option value="openai" id="engCloud">Claude or OpenAI</option>
       <option value="apple">Apple Intelligence (via Shortcuts)</option>
     </select>
     <div id="appleBox" class="hidden">
@@ -661,20 +841,14 @@ details.dbgCheck>summary{font-size:13px;cursor:pointer}
     <div class="grid">
       <div><label for="interval">Photo every (seconds)</label><input id="interval" type="number" min="2" step="1" inputmode="numeric"></div>
       <div class="oa"><label for="facing">Camera</label><select id="facing"><option value="environment">Back</option><option value="user">Front</option></select></div>
-      <div class="oa"><label for="model">OpenAI model</label><select id="model"></select>
-        <input id="modelCustom" class="hidden" placeholder="Model ID, e.g. gpt-5-mini" autocapitalize="off" autocorrect="off" spellcheck="false">
-      </div>
-      <div class="oa"><label for="detail">Image detail</label><select id="detail"><option value="low">Low (fewest tokens)</option><option value="auto">Auto</option><option value="high">High</option></select></div>
+      <div class="oa"><label for="detail">Image detail (OpenAI)</label><select id="detail"><option value="low">Low (fewest tokens)</option><option value="auto">Auto</option><option value="high">High</option></select></div>
       <div class="oa"><label for="maxSide">Photo size sent</label><select id="maxSide"><option value="512">512 px</option><option value="768">768 px</option><option value="1024">1024 px</option><option value="1536">1536 px</option></select></div>
     </div>
-    <div class="oa">
-      <div id="modelNote" class="hint"></div>
-      <div class="presetBar">
-        <button type="button" class="chip" id="kChange">Change API key</button>
-        <button type="button" class="chip" id="kRefresh">Reload models</button>
-      </div>
-      <div id="keyState" class="hint" aria-live="polite"></div>
+    <label>Keys, models and token usage</label>
+    <div class="presetBar">
+      <button type="button" class="chip" id="aiOpen">AI settings</button>
     </div>
+    <div id="aiStatus" class="hint" aria-live="polite"></div>
   </details>
 
   <details class="settings" id="triggersBox">
@@ -766,6 +940,7 @@ details.dbgCheck>summary{font-size:13px;cursor:pointer}
     <div class="heroSummary" id="heroSummary">
       <div class="scroll">
         <h2 id="summaryTitle">Summary so far</h2>
+        <span id="summaryBy" class="badge-ai hidden"></span>
         <p id="summary" class="muted" aria-live="polite"></p>
         <div id="summaryMeta" class="meta num"></div>
       </div>
@@ -864,35 +1039,24 @@ const PAGE_JS = String.raw`
     return n;
   };
 
-  const API_URL = "https://api.openai.com/v1/responses";
-  const modelQuirks = {}; // per model: parameters it rejected, so they aren't sent again
   const REQUEST_TIMEOUT_MS = 90000;
   const KEEP_FRAMES = 3;
   const DEBUG_KEEP = 10; // photos kept in the debug log (memory only)
   const LS_KEY = "vision-session-store-v2";
   const LS_OLD = "vision-session-settings-v1";
-  const PRESET_IDS = ["preset", "pUpdate", "pNew", "pDelete", "pName", "pSave", "pCancel", "modelCustom", "kChange", "kRefresh", "iRefine", "iExpand", "applePhotos"];
-  const OTHER = "__other";
-  // Shown when your model list can't be loaded. Pick "Other model ID…" for anything else.
-  const COMMON_MODELS = ["gpt-5.5", "gpt-5.4", "gpt-5.4-mini", "gpt-5.4-nano", "gpt-5.2", "gpt-5.1", "gpt-5", "gpt-5-mini", "gpt-5-nano", "gpt-4.1", "gpt-4.1-mini", "gpt-4.1-nano", "gpt-4o", "gpt-4o-mini"];
-  const account = {
-    hasKey: !!BOOT.apiKey,
-    models: BOOT.models || [],
-    error: BOOT.modelsError,
-    status: BOOT.modelsStatus,
-    total: BOOT.modelsTotal || 0,
-  };
-  const FIELDS = ["instructions", "interval", "engine", "shortcut", "checkShortcut", "model", "detail", "maxSide", "facing"];
+  const PRESET_IDS = ["preset", "pUpdate", "pNew", "pDelete", "pName", "pSave", "pCancel", "aiOpen", "iRefine", "iExpand", "applePhotos"];
+  // Claude or OpenAI, as chosen in AI settings. Keys never reach this page.
+  const cloud = { hasKey: !!(BOOT.ai && BOOT.ai.hasKey), name: (BOOT.ai && BOOT.ai.name) || "Claude", model: (BOOT.ai && BOOT.ai.model) || "" };
+  const FIELDS = ["instructions", "interval", "engine", "shortcut", "checkShortcut", "detail", "maxSide", "facing"];
   const TRIG_IDS = ["accumulate", "tAdd", "tName", "tCond", "tWhen", "tEvery", "tMode", "tShortcut", "tSend", "tMsg", "tSave", "tDelete", "tCancel"];
   const DEFAULTS = {
     instructions: "Count the different people you see and summarize them: appearance, what they are doing, and when they first appeared.",
     interval: 10,
-    model: pickDefaultModel(),
     detail: "auto",
     maxSide: 768,
     facing: "environment",
     zoom: 1,
-    engine: BOOT.apiKey ? "openai" : "apple",
+    engine: cloud.hasKey ? "openai" : "apple",   // "openai" = Claude or OpenAI, whichever AI settings has in use
     shortcut: BOOT.defaultShortcut,
     checkShortcut: "Vision Session Check",
     applePhotos: true,
@@ -920,7 +1084,6 @@ const PAGE_JS = String.raw`
   let clock = null;
   let starting = false;
 
-  populateModels();
   fillForm();
   renderPresets();
   wirePresets();
@@ -928,7 +1091,7 @@ const PAGE_JS = String.raw`
   $("engine").addEventListener("change", () => { cfg.engine = $("engine").value; persist(); updateEngineUI(); });
   $("shortcut").addEventListener("change", () => { cfg.shortcut = $("shortcut").value.trim() || DEFAULTS.shortcut; persist(); });
   persist();
-  wireAccount();
+  $("aiOpen").addEventListener("click", () => window.__aiOpen());
   wireTriggers();
   wireEditor();
   wireDebug();
@@ -937,12 +1100,8 @@ const PAGE_JS = String.raw`
   $("accumulate").addEventListener("change", () => { cfg.accumulate = $("accumulate").checked; persist(); updateModeUI(); });
   updateModeUI();
   $("checkShortcut").addEventListener("change", () => { cfg.checkShortcut = $("checkShortcut").value.trim() || DEFAULTS.checkShortcut; persist(); });
-  adoptDefaultModel();
-  populateModels();
+  renderCloud();
   renderAll();
-  if (account.status === 401) {
-    showError("OpenAI rejected the saved API key. Open the settings and tap Change API key.");
-  }
 
   function isApple() { return cfg.engine === "apple"; }
   function updateEngineUI() {
@@ -1022,101 +1181,123 @@ const PAGE_JS = String.raw`
     });
   }
 
-  function pickDefaultModel() {
-    const list = BOOT.models || [];
-    if (!list.length || list.indexOf(BOOT.defaultModel) !== -1) return BOOT.defaultModel;
-    const mini = list.filter((id) => /mini/.test(id) && !/^o\d/.test(id));
-    return mini[0] || list[0];
+// ── AI settings sheet (app-blueprints · ai-configuration) ──
+  // Opened with window.__aiOpen(); the Scriptable side pushes state with window.__aiState(state).
+  var AIS=null, aiIsOpen=false, aiArmed=null, aiLoading={};
+  var AI_PN={ anthropic:'Claude', openai:'OpenAI' };
+  var AI_FEAT={"analysis": "Photo analysis", "triggers": "Trigger checks", "refine": "Refining instructions", "test": "Connection tests", "other": "Other"};
+  var AI_JOBS=[];
+  function aiSend(act,data){ nativeCall(act,data,600000).catch(function(e){ window.__aiToast(e.message); }); }
+  function aiEsc(t){ var d=document.createElement('div'); d.textContent=String(t==null?'':t); return d.innerHTML; }
+  function aiFmtN(n){ return n>=1e6?(n/1e6).toFixed(2)+'M':n>=1e4?Math.round(n/1e3)+'k':n>=1e3?(n/1e3).toFixed(1)+'k':String(n); }
+  function aiRel(t){ var s=Math.max(0,Math.round((Date.now()-t)/1000)); if(s<60) return 'just now'; if(s<3600) return Math.round(s/60)+' min ago'; if(s<86400) return Math.round(s/3600)+' h ago'; return Math.round(s/86400)+' d ago'; }
+  function aiDayStr(d){ return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2); }
+  function aiArm(k){ aiArmed=k; renderAI(); setTimeout(function(){ if(aiArmed===k){ aiArmed=null; renderAI(); } },3500); }
+  function aiSheet(){
+    var el=document.getElementById('aisheet');
+    if(!el){
+      el=document.createElement('div'); el.id='aisheet'; el.setAttribute('role','dialog'); el.setAttribute('aria-label','AI settings');
+      document.body.appendChild(el);
+      el.addEventListener('click',aiClick);
+      el.addEventListener('change',function(e){ e.stopPropagation(); if(e.target.classList.contains('modelsel')) aiSend('aimodel',{p:e.target.getAttribute('data-p'),v:e.target.value}); });
+    }
+    return el;
+  }
+  window.__aiOpen=function(){ aiIsOpen=true; renderAI(); aiSend('aistate',{}); };
+  window.__aiState=function(s){ AIS=s; aiLoading={}; renderAI(); if(typeof window.__aiChanged==='function') window.__aiChanged(s); };
+  window.__aiToast=function(t){
+    if(!t) return; if(typeof toast==='function') return toast(t);
+    var el=document.getElementById('aitoast'); if(!el){ el=document.createElement('div'); el.id='aitoast'; el.setAttribute('aria-live','polite'); document.body.appendChild(el); }
+    el.textContent=t; el.classList.add('on'); clearTimeout(el.tm); el.tm=setTimeout(function(){ el.classList.remove('on'); },2600);
+  };
+  function aiUsageBlock(p,P){
+    var days=[], now=new Date(), i;
+    for(i=13;i>=0;i--){ var d=new Date(now); d.setDate(d.getDate()-i); days.push(aiDayStr(d)); }
+    var tot=function(k){ var x=P.days[k]; return x?x.in+x.out:0; };
+    var max=Math.max.apply(null,[1].concat(days.map(tot))), month=AIS.today.slice(0,7);
+    var monthTot=Object.keys(P.days).filter(function(k){ return k.indexOf(month)===0; }).reduce(function(n,k){ return n+P.days[k].in+P.days[k].out; },0);
+    var rows=function(obj,label){ return Object.keys(obj).sort(function(a,b){ return (obj[b].in+obj[b].out)-(obj[a].in+obj[a].out); }).map(function(k){ var x=obj[k];
+      return '<tr><td>'+aiEsc(label(k))+'</td><td>'+x.calls+'</td><td>'+aiFmtN(x.in)+'</td><td>'+aiFmtN(x.out)+'</td></tr>'; }).join(''); };
+    return '<div class="ucard"><div class="aic-h"><b>'+AI_PN[p]+'</b><span class="muted small">'+P.calls+' request'+(P.calls===1?'':'s')+'</span></div>'+
+      '<div class="ustat"><div><b>'+aiFmtN(P.in+P.out)+'</b><small>total tokens</small></div><div><b>'+aiFmtN(P.in)+'</b><small>input</small></div><div><b>'+aiFmtN(P.out)+'</b><small>output</small></div></div>'+
+      '<p class="note">Today '+aiFmtN(tot(AIS.today))+' tokens — this month '+aiFmtN(monthTot)+' tokens</p>'+
+      '<div class="ubars" aria-label="Tokens per day, last 14 days">'+days.map(function(k){ var v=tot(k); return '<span style="height:'+Math.max(v?6:2,v/max*100)+'%" class="'+(v?'':'zero')+'" title="'+k+': '+v+' tokens"></span>'; }).join('')+'</div>'+
+      '<div class="ubars-l"><span>2 weeks ago</span><span>Today</span></div>'+
+      '<table class="utab"><tr><th>Feature</th><th>Requests</th><th>In</th><th>Out</th></tr>'+rows(P.features,function(k){ return AI_FEAT[k]||k; })+'</table>'+
+      '<table class="utab"><tr><th>Model</th><th>Requests</th><th>In</th><th>Out</th></tr>'+rows(P.models,function(k){ return k; })+'</table></div>';
+  }
+  function renderAI(){
+    var el=aiSheet(), keep=el.scrollTop;
+    el.classList.toggle('open',aiIsOpen);
+    if(!aiIsOpen) return;
+    if(!AIS){ el.innerHTML='<div class="sh-head"><h2>AI</h2><button class="link" data-aiact="aiclose">Done</button></div><div class="sh-body"><p class="muted pad">Loading…</p></div>'; return; }
+    var A=AIS;
+    var card=function(p){
+      var key=A.keys[p], ml=(A.models[p]||{}).list||[], cur=A.model[p];
+      var opts=ml.some(function(m){ return m.id===cur; })?ml:[{id:cur,name:cur}].concat(ml);   // keep the chosen model visible
+      return '<div class="aicard '+(A.provider===p?'active':'')+'">'+
+        '<div class="aic-h"><b>'+AI_PN[p]+'</b>'+(A.provider===p?'<span class="badge-ai">In use</span>':key?'<button class="sm" data-aiact="aiprov" data-v="'+p+'">Use '+AI_PN[p]+'</button>':'')+'</div>'+
+        '<div class="aic-row"><span class="lbl">API key</span>'+(key?'<code>'+aiEsc(key)+'</code>':'<span class="muted">Not set</span>')+'</div>'+
+        '<div class="aic-btns"><button class="sm '+(key?'':'primary')+'" data-aiact="aikey" data-v="'+p+'">'+(key?'Change key':'Add key')+'</button>'+
+          (key?'<button class="sm" data-aiact="aitest" data-v="'+p+'">Test connection</button><button class="sm danger '+(aiArmed==='rm'+p?'armed':'')+'" data-aiact="airm" data-v="'+p+'">'+(aiArmed==='rm'+p?'Confirm':'Remove')+'</button>':'')+'</div>'+
+        '<label class="aic-row lbl" for="ms-'+p+'">Model</label>'+
+        '<select id="ms-'+p+'" class="modelsel" data-p="'+p+'">'+opts.map(function(m){ return '<option value="'+aiEsc(m.id)+'" '+(m.id===cur?'selected':'')+'>'+aiEsc(m.name)+(m.name!==m.id?' — '+aiEsc(m.id):'')+'</option>'; }).join('')+'</select>'+
+        '<div class="aic-btns"><button class="sm" data-aiact="aimodels" data-v="'+p+'" '+(key&&!aiLoading[p]?'':'disabled')+'>'+(aiLoading[p]?'Loading…':ml.length?'Refresh model list':'Load my models')+'</button>'+
+          '<span class="note">'+(ml.length?ml.length+' models, updated '+aiRel(A.models[p].at):key?'Loads the models your key can use':'Add a key to load models')+'</span></div>'+
+      '</div>';
+    };
+    var order=A.provider==='openai'?['openai','anthropic']:['anthropic','openai'];
+    var used=Object.keys(A.usage.p).filter(function(p){ return A.usage.p[p].calls; });
+    var jobs=AI_JOBS.length?AI_JOBS.map(function(j){
+        return '<div class="srow"><div class="grow"><b>'+aiEsc(j.title)+'</b><small class="muted">'+aiEsc(j.text)+'</small></div>'+
+          '<button class="switch '+(A.ai?'on':'')+'" data-aiact="aitoggle" aria-label="'+aiEsc(j.title)+'"></button></div>'; }).join('')
+      :'<p class="muted pad">Nothing runs in the background: AI only runs during a capture session you start, or when you refine instructions.</p>';
+    el.innerHTML='<div class="sh-head"><h2>AI</h2><button class="link" data-aiact="aiclose">Done</button></div><div class="sh-body">'+
+      '<p class="hint">Keys stay in this iPhone’s Keychain. Only the provider marked “In use” is called.</p>'+
+      order.map(card).join('')+
+      '<h3 class="sec">What AI does</h3>'+jobs+
+      '<h3 class="sec">Token usage</h3>'+
+      (used.length?used.map(function(p){ return aiUsageBlock(p,A.usage.p[p]); }).join(''):'<p class="muted pad">No AI requests yet.</p>')+
+      (used.length?'<div class="aic-btns"><span class="note">Counting since '+new Date(A.usage.since).toLocaleDateString(undefined,{month:'long',day:'numeric',year:'numeric'})+'</span>'+
+        '<button class="sm danger '+(aiArmed==='reset'?'armed':'')+'" data-aiact="usagereset">'+(aiArmed==='reset'?'Confirm reset':'Reset counters')+'</button></div>':'')+
+    '</div>';
+    el.scrollTop=keep;   // re-renders must not jump the user back to the top
+  }
+  function aiClick(e){
+    e.stopPropagation();   // the sheet's taps never reach the app's own click handler
+    if(e.target.closest('select, option, input, textarea')) return;
+    var t=e.target.closest('[data-aiact]'); if(!t||t.disabled) return;
+    var act=t.getAttribute('data-aiact'), v=t.getAttribute('data-v');
+    if(act==='aiclose'){ aiIsOpen=false; aiArmed=null; renderAI(); return; }
+    if(act==='aikey'||act==='aitest'||act==='aiprov'||act==='aitoggle'){ if(act==='aitest') window.__aiToast('Testing '+AI_PN[v]+'…'); aiSend(act,{v:v}); return; }
+    if(act==='aimodels'){ aiLoading[v]=1; renderAI(); aiSend('aimodels',{v:v}); return; }
+    if(act==='airm'){ if(aiArmed==='rm'+v){ aiArmed=null; aiSend('airm',{v:v}); } else aiArm('rm'+v); return; }
+    if(act==='usagereset'){ if(aiArmed==='reset'){ aiArmed=null; aiSend('usagereset',{}); } else aiArm('reset'); return; }
   }
 
-  function populateModels() {
-    const sel = $("model");
-    const fromAccount = account.models.length > 0;
-    const list = fromAccount ? account.models.slice() : COMMON_MODELS.slice();
-    const custom = cfg.model && list.indexOf(cfg.model) === -1;
-    sel.textContent = "";
-    list.forEach((id) => {
-      const o = el("option", null, id);
-      o.value = id;
-      sel.appendChild(o);
-    });
-    const other = el("option", null, "Other model ID…");
-    other.value = OTHER;
-    sel.appendChild(other);
-    sel.value = custom ? OTHER : cfg.model;
-    $("modelCustom").value = custom ? cfg.model : "";
-    $("modelCustom").classList.toggle("hidden", !custom);
-
-    let note;
-    if (!account.hasKey) note = "No API key saved. Add one with Change API key, or use Apple Intelligence.";
-    else if (account.error) note = "Couldn't list your models (" + account.error + "). Showing common models instead.";
-    else note = list.length + " chat models from your account (of " + account.total + " in total).";
-    $("modelNote").textContent = note;
-    $("keyState").textContent = account.hasKey ? "An API key is saved on this device." : "";
+  // Shows the provider in use, and offers "Claude or OpenAI" under Analyze with only when a key is saved.
+  function renderCloud() {
+    const sel = $("engine");
+    const cloudOpt = renderCloud.opt || (renderCloud.opt = $("engCloud"));   // kept while removed from the menu
+    if (cloud.hasKey) {
+      cloudOpt.textContent = cloud.name + " — " + cloud.model;
+      if (!cloudOpt.parentNode) sel.insertBefore(cloudOpt, sel.firstChild);
+    } else if (cloudOpt.parentNode) {
+      cloudOpt.remove();
+      if (cfg.engine === "openai") { cfg.engine = "apple"; persist(); }
+    }
+    sel.value = cfg.engine;
+    updateEngineUI();
+    $("aiStatus").textContent = cloud.hasKey
+      ? "In use: " + cloud.name + " — " + cloud.model + "."
+      : "Add a Claude or OpenAI key to analyze photos in the cloud. Apple Intelligence works without one.";
   }
-
-  function applyAccount(info) {
-    account.hasKey = !!info.hasKey;
-    account.models = info.models || [];
-    account.error = info.error;
-    account.status = info.status;
-    account.total = info.total || 0;
-    BOOT.apiKey = info.apiKey || "";
-    adoptDefaultModel();
-    populateModels();
-    persist();
-  }
-
-  // Until you pick a model yourself, follow what your account actually offers.
-  function adoptDefaultModel() {
-    if (!account.models.length || account.models.indexOf(cfg.model) !== -1 || cfg.modelChosen) return;
-    cfg.model = account.models.indexOf(BOOT.defaultModel) !== -1 ? BOOT.defaultModel : account.models[0];
-  }
-
-  function wireAccount() {
-    $("model").addEventListener("change", () => {
-      const v = $("model").value;
-      const isOther = v === OTHER;
-      $("modelCustom").classList.toggle("hidden", !isOther);
-      if (isOther) { $("modelCustom").focus(); return; }
-      cfg.model = v;
-      cfg.modelChosen = true;
-      persist();
-    });
-    $("modelCustom").addEventListener("change", () => {
-      const v = $("modelCustom").value.trim();
-      if (!v) return;
-      cfg.model = v;
-      cfg.modelChosen = true;
-      persist();
-    });
-    const busy = (b, label) => { b.disabled = !!label; if (label) { b.dataset.label = b.textContent; b.textContent = label; } else if (b.dataset.label) b.textContent = b.dataset.label; };
-    $("kChange").addEventListener("click", async () => {
-      busy($("kChange"), "Waiting for the key…");
-      try {
-        const info = await nativeCall("changeKey", null, 600000);
-        if (info && !info.cancelled) {
-          applyAccount(info);
-          hideError();
-          $("keyState").textContent = info.hasKey ? "Key saved. Models reloaded." : "Key removed.";
-        }
-      } catch (e) {
-        $("keyState").textContent = "Couldn't change the key: " + e.message;
-      } finally {
-        busy($("kChange"));
-      }
-    });
-    $("kRefresh").addEventListener("click", async () => {
-      busy($("kRefresh"), "Loading…");
-      try {
-        applyAccount(await nativeCall("models", null, 30000));
-      } catch (e) {
-        $("modelNote").textContent = "Couldn't reload models: " + e.message;
-      } finally {
-        busy($("kRefresh"));
-      }
-    });
-  }
+  window.__aiChanged = (s) => {
+    cloud.hasKey = s.hasKey;
+    cloud.name = AI_PN[s.provider];
+    cloud.model = s.model[s.provider];
+    renderCloud();
+  };
   $("toggle").addEventListener("click", () => (S.running ? endSession() : startSession()));
   $("mClose").addEventListener("click", () => { $("modal").classList.add("hidden"); showQueuedUpdate(); });
   $("verLine").textContent = "VisionX v" + BOOT.version;
@@ -1270,10 +1451,9 @@ const PAGE_JS = String.raw`
     });
   }
   function fillForm() {
-    FIELDS.forEach((k) => { if (k !== "model") $(k).value = String(cfg[k]); });
+    FIELDS.forEach((k) => { $(k).value = String(cfg[k]); });
     $("accumulate").checked = cfg.accumulate !== false;
     $("applePhotos").checked = cfg.applePhotos !== false;
-    populateModels();
   }
   function isMoment() { return cfg.accumulate === false; }
   function updateModeUI() {
@@ -1294,7 +1474,6 @@ const PAGE_JS = String.raw`
     cfg = Object.assign({}, cfg, {
       instructions: $("instructions").value.trim() || DEFAULTS.instructions,
       interval: Math.max(2, parseInt($("interval").value, 10) || DEFAULTS.interval),
-      model: ($("model").value === OTHER ? $("modelCustom").value.trim() : $("model").value) || cfg.model || DEFAULTS.model,
       detail: $("detail").value,
       maxSide: parseInt($("maxSide").value, 10) || DEFAULTS.maxSide,
       facing: $("facing").value,
@@ -1331,9 +1510,10 @@ const PAGE_JS = String.raw`
     readForm();
     hideError();
     S = newSession();
+    S.by = isApple() ? "Apple Intelligence" : cloud.name;   // labels everything this session's AI writes
     renderAll();
-    if (!isApple() && !account.hasKey) {
-      showError("OpenAI needs an API key. Open the settings and tap Change API key, or switch to Apple Intelligence.");
+    if (!isApple() && !cloud.hasKey) {
+      showError("Claude or OpenAI needs an API key. Open Settings › AI settings to add one, or switch to Apple Intelligence.");
       starting = false;
       $("toggle").disabled = false;
       return;
@@ -1410,7 +1590,7 @@ const PAGE_JS = String.raw`
 
     sess.stats.requests++;
     let afterTask = null;
-    const dbg = addDebug(sess, frame, "OpenAI");
+    const dbg = addDebug(sess, frame, cloud.name);
     const t0 = Date.now();
     try {
       const { result, usage } = await analyze(sess, frame, dbg);
@@ -1435,7 +1615,7 @@ const PAGE_JS = String.raw`
       else sess.stats.failed++;
       dbg.error = e.message;
       if (e.attempts) { dbg.attempts = e.attempts; dbg.dropped = e.dropped || []; }
-      if (e.fatal) sess.fatal = "OpenAI request stopped the session: " + e.message;
+      if (e.fatal) sess.fatal = cloud.name + " request stopped the session: " + e.message;
       else if (!e.cancelled && sess === S) showError("Photo #" + frame.idx + " wasn't analyzed: " + e.message + ". The session keeps going.");
     } finally {
       dbg.ms = Date.now() - t0;
@@ -1682,31 +1862,9 @@ const PAGE_JS = String.raw`
       "Cumulative summary so far:\n" + (sess.summary || "(nothing yet, this is the first analyzed frame)");
   }
 
+  // What the Scriptable side sends through aiCall: the provider and model come from AI settings.
   function buildBody(sess, frame) {
-    const body = {
-      model: cfg.model,
-      instructions: systemPrompt(),
-      input: [{
-        role: "user",
-        content: [
-          { type: "input_text", text: frameContext(sess, frame) },
-          { type: "input_image", image_url: frame.img, detail: cfg.detail },
-        ],
-      }],
-      max_output_tokens: 4000,
-      store: false,
-    };
-    return withModelOptions(body);
-  }
-
-  function withModelOptions(body) {
-    const q = modelQuirks[body.model] || {};
-    if (!q.noJson) body.text = { format: { type: "json_object" } };
-    // Reasoning models think before answering; keep that short for a live feed.
-    if (!q.noReasoning && /^(o\d|gpt-5|gpt-6)/i.test(body.model) && !/chat/i.test(body.model)) {
-      body.reasoning = { effort: "low" };
-    }
-    return body;
+    return { feature: "analysis", system: systemPrompt(), text: frameContext(sess, frame), image: frame.img, detail: cfg.detail, maxTokens: 4000 };
   }
 
   // ── debug log: the last 10 photos with what was sent and what came back ──
@@ -1715,7 +1873,7 @@ const PAGE_JS = String.raw`
   function addDebug(sess, frame, engine) {
     const entry = {
       id: "d-" + frame.idx, idx: frame.idx, time: frame.time, frame: frame,
-      engine: engine, model: engine === "OpenAI" ? cfg.model : cfg.shortcut,
+      engine: engine, model: engine === "Apple Intelligence" ? cfg.shortcut : cloud.model,
       mode: isMoment() ? "fresh each photo" : "built up over the session",
       request: null, raw: "", parsed: null, usage: null, ms: 0, attempts: 0, dropped: [], error: "", checks: [],
     };
@@ -2012,20 +2170,15 @@ const PAGE_JS = String.raw`
     try {
       const prompt = refinePrompt(current, ask);
       let reply, via;
-      if (account.hasKey) {
-        const r = await openaiRequest({ running: true }, () => withModelOptions({
-          model: cfg.model,
-          input: [{ role: "user", content: [{ type: "input_text", text: prompt }] }],
-          max_output_tokens: 2000,
-          store: false,
-        }));
+      if (cloud.hasKey) {
+        const r = await aiRequest(() => ({ feature: "refine", system: "You improve instructions for a photo-analysis app. Follow the requested reply format exactly.", text: prompt, maxTokens: 2000 }));
         reply = r.text;
-        via = cfg.model + (r.usage.total_tokens ? ", " + fmtNum(r.usage.total_tokens) + " tokens" : "");
+        via = "✦ AI by " + r.by + ", " + r.model + (r.usage.total_tokens ? ", " + fmtNum(r.usage.total_tokens) + " tokens" : "");
       } else if (isApple()) {
         reply = await withShortcutLock(() => nativeCall("appleText", { shortcut: cfg.checkShortcut, text: prompt }, 180000));
-        via = "Apple Intelligence";
+        via = "✦ AI by Apple Intelligence";
       } else {
-        throw new Error("add an OpenAI API key, or switch to Apple Intelligence");
+        throw new Error("add a Claude or OpenAI key in Settings › AI settings, or switch to Apple Intelligence");
       }
       const out = parseRefine(reply);
       if (!out.text) throw new Error("the model returned nothing");
@@ -2040,7 +2193,7 @@ const PAGE_JS = String.raw`
       $("edSuggest").scrollIntoView({ block: "nearest" });
     } catch (e) {
       $("edStatus").textContent = "Couldn't refine: " + e.message +
-        (!account.hasKey && isApple() ? ". Refining with Apple Intelligence uses the checker shortcut (see Triggers)." : ".");
+        (!cloud.hasKey && isApple() ? ". Refining with Apple Intelligence uses the checker shortcut (see Triggers)." : ".");
     } finally {
       refining = false;
       buttons.forEach((b) => { b.disabled = false; });
@@ -2208,12 +2361,7 @@ const PAGE_JS = String.raw`
         log.raw = text || "";
         verdict = parseVerdict(text);
       } else {
-        const r = await openaiRequest(sess, () => withModelOptions({
-          model: cfg.model,
-          input: [{ role: "user", content: [{ type: "input_text", text: prompt }] }],
-          max_output_tokens: 1500,
-          store: false,
-        }));
+        const r = await aiRequest(() => ({ feature: "triggers", system: "You check conditions for a live camera session. Follow the requested reply format exactly.", text: prompt, maxTokens: 1500 }));
         sess.stats.prompt += r.usage.prompt_tokens || 0;
         sess.stats.completion += r.usage.completion_tokens || 0;
         sess.stats.total += r.usage.total_tokens || 0;
@@ -2522,7 +2670,7 @@ const PAGE_JS = String.raw`
 
 
   async function analyze(sess, frame, dbg) {
-    const r = await openaiRequest(sess, () => {
+    const r = await aiRequest(() => {
       const body = buildBody(sess, frame);
       if (dbg) dbg.request = requestForDebug(body);
       return body;
@@ -2534,112 +2682,32 @@ const PAGE_JS = String.raw`
 
   // The request as sent, minus the photo bytes (shown separately).
   function requestForDebug(body) {
-    const content = (body.input && body.input[0] && body.input[0].content) || [];
-    const textPart = content.find((c) => c.type === "input_text");
-    const imgPart = content.find((c) => c.type === "input_image");
     return {
-      instructions: body.instructions || "",
-      text: textPart ? textPart.text : "",
+      instructions: body.system || "",
+      text: body.text || "",
       settings: {
-        model: body.model,
-        image: imgPart ? { size: imageInfo(imgPart.image_url), detail: imgPart.detail } : null,
-        max_output_tokens: body.max_output_tokens,
-        json_format: !!body.text,
-        reasoning: body.reasoning ? body.reasoning.effort : null,
-        store: body.store,
+        provider: cloud.name,
+        model: cloud.model,
+        image: body.image ? { size: imageInfo(body.image), detail: cloud.name === "OpenAI" ? body.detail : "n/a (OpenAI only)" } : null,
+        max_tokens: body.maxTokens,
       },
     };
   }
 
-  // If a model rejects an optional parameter, drop it and try again.
-  async function openaiRequest(sess, makeBody) {
-    const dropped = [];
-    for (let attempt = 0; attempt < 3; attempt++) {
-      const body = makeBody();
-      try {
-        const r = await sendOpenAI(sess, body);
-        return Object.assign(r, { body: body, attempts: attempt + 1, dropped: dropped });
-      } catch (e) {
-        e.attempts = attempt + 1;
-        e.dropped = dropped;
-        if (e.status !== 400 || !sess.running) throw e;
-        const q = (modelQuirks[cfg.model] = modelQuirks[cfg.model] || {});
-        const what = String(e.param || "") + " " + e.message;
-        if (body.reasoning && /reasoning/i.test(what)) { q.noReasoning = true; dropped.push("reasoning (" + e.message + ")"); continue; }
-        if (body.text && /(text\.format|json_object|response_format)/i.test(what)) { q.noJson = true; dropped.push("JSON format (" + e.message + ")"); continue; }
-        throw e;
-      }
-    }
-    throw new Error("the model rejected the request");
-  }
-
-  // Normal path: Scriptable sends the request natively (no WebView network limits).
-  async function sendOpenAI(sess, body) {
+  // One request through the Scriptable side's aiCall (Claude or OpenAI, as set in AI settings).
+  async function aiRequest(makeBody) {
+    const body = makeBody();
     let r;
     try {
-      r = await nativeCall("openai", body, REQUEST_TIMEOUT_MS);
+      r = await nativeCall("ai", body, REQUEST_TIMEOUT_MS);
     } catch (e) {
-      if (e.bridgeDown) return analyzeDirect(sess, body);
+      e.attempts = 1;
+      e.dropped = [];
+      if (e.bridgeDown) e.message = "the connection to Scriptable was lost. Close VisionX and open it again";
       throw e;
     }
-    return interpretOpenAI(r.status, r.data, r.raw);
-  }
-
-  function interpretOpenAI(status, data, raw) {
-    if (status < 200 || status >= 300 || !data) {
-      const apiErr = (data && data.error) || {};
-      const err = new Error(apiErr.message || ("HTTP " + status + (raw ? ": " + raw : "")));
-      err.status = status;
-      err.param = apiErr.param;
-      err.fatal = [401, 403, 404].includes(status) || apiErr.code === "insufficient_quota" || apiErr.code === "model_not_found";
-      throw err;
-    }
-    const parts = [];
-    (data.output || []).forEach((item) => {
-      (item.content || []).forEach((c) => { if (c.type === "output_text" && c.text) parts.push(c.text); });
-    });
-    const content = parts.join("") || data.output_text || "";
-    if (!content) {
-      const why = data.status === "incomplete"
-        ? "the model stopped early (" + ((data.incomplete_details && data.incomplete_details.reason) || "incomplete") + ")"
-        : "the model returned no text";
-      throw new Error(why);
-    }
-    const u = data.usage || {};
-    return {
-      text: content,
-      usage: { prompt_tokens: u.input_tokens || 0, completion_tokens: u.output_tokens || 0, total_tokens: u.total_tokens || 0 },
-    };
-  }
-
-  // Fallback if the bridge isn't working: call OpenAI straight from the WebView.
-  async function analyzeDirect(sess, body) {
-    const ctrl = new AbortController();
-    sess.ctrl = ctrl;
-    let timedOut = false;
-    const timer = setTimeout(() => { timedOut = true; ctrl.abort(); }, REQUEST_TIMEOUT_MS);
-    try {
-      const res = await fetch(API_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: "Bearer " + BOOT.apiKey },
-        body: JSON.stringify(body),
-        signal: ctrl.signal,
-      });
-      let data = null;
-      try { data = await res.json(); } catch (_) {}
-      return interpretOpenAI(res.status, data, null);
-    } catch (e) {
-      if (e.name === "AbortError") {
-        const err = new Error(timedOut ? "request timed out" : "cancelled when the session ended");
-        err.cancelled = !timedOut;
-        throw err;
-      }
-      if (e.name === "TypeError") throw new Error("the WebView couldn't reach OpenAI (" + (e.message || "TypeError") + ")");
-      throw e;
-    } finally {
-      clearTimeout(timer);
-      if (sess.ctrl === ctrl) sess.ctrl = null;
-    }
+    if (!r || !String(r.text || "").trim()) throw new Error("the model returned no text");
+    return Object.assign(r, { body: body, attempts: 1, dropped: [] });
   }
 
   // Accepts strict JSON, JSON with common slips (code fences, line breaks,
@@ -2810,6 +2878,8 @@ const PAGE_JS = String.raw`
     if (S.summaryAt) bits.push((isMoment() ? "From photo #" : "Updated after photo #") + S.summaryAt.idx + " at " + S.summaryAt.time + ".");
     if (S.running && S.busyIdx) bits.push("Adding photo #" + S.busyIdx + "…");
     $("summaryMeta").textContent = bits.join(" ");
+    $("summaryBy").textContent = S.summary && S.by ? "✦ AI summary by " + S.by : "";
+    $("summaryBy").classList.toggle("hidden", !(S.summary && S.by));
     if (S.summary && S.summary !== shownSummary) {
       shownSummary = S.summary;
       const box = $("heroSummary");
@@ -2908,7 +2978,7 @@ const PAGE_JS = String.raw`
     }
     rows.push(
       ["Average response time", st.ok ? (st.latency / st.ok / 1000).toFixed(1) + " s" : "–"],
-      ["Analyzed with", isApple() ? "Apple Intelligence (" + cfg.shortcut + ")" : cfg.model],
+      ["Analyzed with", isApple() ? "Apple Intelligence (" + cfg.shortcut + ")" : (S.by || cloud.name) + " — " + cloud.model],
       ["Interval", cfg.interval + " s"],
       ["Summary", isMoment() ? "Fresh for each photo" : "Built up over the session"]
     );
