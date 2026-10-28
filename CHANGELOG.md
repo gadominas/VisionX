@@ -2,6 +2,26 @@
 
 All notable changes to VisionX. Generated from `releases.json`; edit that file, not this one.
 
+## 1.8.0 (2026-10-28): Claude joins OpenAI and Apple Intelligence
+
+- 🤖 **Claude or OpenAI**: Photo analysis, triggers and refining now work with either provider. Switch any time in AI settings.
+- 🧠 **Pick any model**: Load the models your own key can use, choose one and test the connection.
+- 📊 **See your token usage**: Tokens per day, feature and model, so you always know what AI costs you.
+
+**Changes**
+
+- New AI settings sheet (Settings › AI settings): Claude and OpenAI keys, model picker loaded from your key, connection test, token usage per day, feature and model
+- Keys are entered in a native secure prompt and stored in the iOS Keychain; the page no longer receives the key at all
+- Photo analysis, trigger checks and instruction refining go through one shared AI call, following the app-blueprints AI configuration
+- No key prompt at start: Apple Intelligence works without a key, and the cloud option appears under Analyze with once a key is saved
+- The summary and refined instructions are labelled with the AI that wrote them
+- Your existing OpenAI key moves over automatically
+- The model is now chosen in AI settings rather than per preset; the OpenAI-only image detail setting stays
+
+**Fixes**
+
+- The API key was passed to the page and used for a direct-request fallback; both are gone
+
 ## 1.7.0 (2026-10-27): Never miss an update
 
 - 🔔 **Update reminders**: VisionX tells you when a new version is out, and waits two days if you tap Later.

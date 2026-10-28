@@ -4,13 +4,59 @@
   "script": "VisionX.js",
   "releases": [
     {
+      "version": "1.8.0",
+      "date": "2026-10-28",
+      "title": "Claude joins OpenAI and Apple Intelligence",
+      "highlights": [
+        {
+          "icon": "🤖",
+          "title": "Claude or OpenAI",
+          "text": "Photo analysis, triggers and refining now work with either provider. Switch any time in AI settings."
+        },
+        {
+          "icon": "🧠",
+          "title": "Pick any model",
+          "text": "Load the models your own key can use, choose one and test the connection."
+        },
+        {
+          "icon": "📊",
+          "title": "See your token usage",
+          "text": "Tokens per day, feature and model, so you always know what AI costs you."
+        }
+      ],
+      "changes": [
+        "New AI settings sheet (Settings › AI settings): Claude and OpenAI keys, model picker loaded from your key, connection test, token usage per day, feature and model",
+        "Keys are entered in a native secure prompt and stored in the iOS Keychain; the page no longer receives the key at all",
+        "Photo analysis, trigger checks and instruction refining go through one shared AI call, following the app-blueprints AI configuration",
+        "No key prompt at start: Apple Intelligence works without a key, and the cloud option appears under Analyze with once a key is saved",
+        "The summary and refined instructions are labelled with the AI that wrote them",
+        "Your existing OpenAI key moves over automatically",
+        "The model is now chosen in AI settings rather than per preset; the OpenAI-only image detail setting stays"
+      ],
+      "fixes": [
+        "The API key was passed to the page and used for a direct-request fallback; both are gone"
+      ]
+    },
+    {
       "version": "1.7.0",
       "date": "2026-10-27",
       "title": "Never miss an update",
       "highlights": [
-        { "icon": "🔔", "title": "Update reminders", "text": "VisionX tells you when a new version is out, and waits two days if you tap Later." },
-        { "icon": "⬆️", "title": "One-tap update", "text": "Update right from the app. No need to run the installer again." },
-        { "icon": "✨", "title": "See what's new first", "text": "Every update shows its three best features before you install it." }
+        {
+          "icon": "🔔",
+          "title": "Update reminders",
+          "text": "VisionX tells you when a new version is out, and waits two days if you tap Later."
+        },
+        {
+          "icon": "⬆️",
+          "title": "One-tap update",
+          "text": "Update right from the app. No need to run the installer again."
+        },
+        {
+          "icon": "✨",
+          "title": "See what's new first",
+          "text": "Every update shows its three best features before you install it."
+        }
       ],
       "changes": [
         "Update check when VisionX opens, with a what's-new sheet (Update now / Later)",
@@ -26,9 +72,21 @@
       "date": "2026-10-26",
       "title": "Triggers for repeated moments",
       "highlights": [
-        { "icon": "🔁", "title": "Each new occurrence", "text": "Run a shortcut every time something happens again, like each new thumbs-up." },
-        { "icon": "🧾", "title": "See why it ran", "text": "Every trigger check shows whether its shortcut ran, and why or why not." },
-        { "icon": "💡", "title": "Clearer trigger options", "text": "Each run setting explains itself in the trigger editor." }
+        {
+          "icon": "🔁",
+          "title": "Each new occurrence",
+          "text": "Run a shortcut every time something happens again, like each new thumbs-up."
+        },
+        {
+          "icon": "🧾",
+          "title": "See why it ran",
+          "text": "Every trigger check shows whether its shortcut ran, and why or why not."
+        },
+        {
+          "icon": "💡",
+          "title": "Clearer trigger options",
+          "text": "Each run setting explains itself in the trigger editor."
+        }
       ],
       "changes": [
         "New run setting \"Each new occurrence\": the check is told what had happened when the shortcut last ran",
@@ -44,9 +102,21 @@
       "date": "2026-10-26",
       "title": "Triggers in step with photos",
       "highlights": [
-        { "icon": "📸", "title": "Check after each photo", "text": "Triggers can run right after every photo, against the newest summary." },
-        { "icon": "⏸️", "title": "Next photo waits", "text": "No new photo is taken until the triggered shortcuts have finished." },
-        { "icon": "🔒", "title": "Steady screen", "text": "Pinch and double-tap no longer zoom the app by accident." }
+        {
+          "icon": "📸",
+          "title": "Check after each photo",
+          "text": "Triggers can run right after every photo, against the newest summary."
+        },
+        {
+          "icon": "⏸️",
+          "title": "Next photo waits",
+          "text": "No new photo is taken until the triggered shortcuts have finished."
+        },
+        {
+          "icon": "🔒",
+          "title": "Steady screen",
+          "text": "Pinch and double-tap no longer zoom the app by accident."
+        }
       ],
       "changes": [
         "Trigger option \"When to check\": every few seconds, or after each photo is analyzed",
@@ -62,9 +132,21 @@
       "date": "2026-10-26",
       "title": "See what the AI sees",
       "highlights": [
-        { "icon": "🐞", "title": "Debug log", "text": "The last 10 photos with exactly what was sent and what came back." },
-        { "icon": "🎨", "title": "Readable JSON", "text": "Tracked details and model replies are syntax-highlighted." },
-        { "icon": "📋", "title": "Copy as JSON", "text": "Copy the whole log, without photos, to share or inspect." }
+        {
+          "icon": "🐞",
+          "title": "Debug log",
+          "text": "The last 10 photos with exactly what was sent and what came back."
+        },
+        {
+          "icon": "🎨",
+          "title": "Readable JSON",
+          "text": "Tracked details and model replies are syntax-highlighted."
+        },
+        {
+          "icon": "📋",
+          "title": "Copy as JSON",
+          "text": "Copy the whole log, without photos, to share or inspect."
+        }
       ],
       "changes": [
         "Debug panel with request, raw reply, parsed reply, usage and trigger checks per photo",
@@ -77,9 +159,21 @@
       "date": "2026-10-26",
       "title": "Apple Intelligence, hands-free",
       "highlights": [
-        { "icon": "🙌", "title": "No paste prompts", "text": "Turn off Show each photo here to run without iOS asking to paste." },
-        { "icon": "📝", "title": "Summary always shows", "text": "Apple's replies are read in more shapes, so the summary never stays empty." },
-        { "icon": "🧠", "title": "Details stay intact", "text": "Multi-line tracked details are kept and passed on to the next photo." }
+        {
+          "icon": "🙌",
+          "title": "No paste prompts",
+          "text": "Turn off Show each photo here to run without iOS asking to paste."
+        },
+        {
+          "icon": "📝",
+          "title": "Summary always shows",
+          "text": "Apple's replies are read in more shapes, so the summary never stays empty."
+        },
+        {
+          "icon": "🧠",
+          "title": "Details stay intact",
+          "text": "Multi-line tracked details are kept and passed on to the next photo."
+        }
       ],
       "changes": [
         "\"Show each photo here\" switch for Apple Intelligence",
@@ -96,9 +190,21 @@
       "date": "2026-10-26",
       "title": "Better instructions in one tap",
       "highlights": [
-        { "icon": "✍️", "title": "Full-screen editor", "text": "Expand your instructions into a roomy editor with a word count." },
-        { "icon": "🪄", "title": "Refine with AI", "text": "Make instructions clearer, more specific or shorter with one tap." },
-        { "icon": "↩️", "title": "You decide", "text": "Compare the suggestion with your text, then use it or undo it." }
+        {
+          "icon": "✍️",
+          "title": "Full-screen editor",
+          "text": "Expand your instructions into a roomy editor with a word count."
+        },
+        {
+          "icon": "🪄",
+          "title": "Refine with AI",
+          "text": "Make instructions clearer, more specific or shorter with one tap."
+        },
+        {
+          "icon": "↩️",
+          "title": "You decide",
+          "text": "Compare the suggestion with your text, then use it or undo it."
+        }
       ],
       "changes": [
         "Expand and Refine with AI buttons next to the instructions"
@@ -110,9 +216,21 @@
       "date": "2026-10-26",
       "title": "Zoom while capturing",
       "highlights": [
-        { "icon": "🔍", "title": "Zoom slider", "text": "Zoom from 1× to 5×, even in the middle of a session." },
-        { "icon": "📷", "title": "Sharp camera zoom", "text": "Uses the iPhone's own zoom when available, cropping only beyond it." },
-        { "icon": "🎯", "title": "Aim with ease", "text": "The live preview grows while you zoom so you can frame the shot." }
+        {
+          "icon": "🔍",
+          "title": "Zoom slider",
+          "text": "Zoom from 1× to 5×, even in the middle of a session."
+        },
+        {
+          "icon": "📷",
+          "title": "Sharp camera zoom",
+          "text": "Uses the iPhone's own zoom when available, cropping only beyond it."
+        },
+        {
+          "icon": "🎯",
+          "title": "Aim with ease",
+          "text": "The live preview grows while you zoom so you can frame the shot."
+        }
       ],
       "changes": [
         "Higher camera resolution so digital zoom keeps more detail"
@@ -124,9 +242,21 @@
       "date": "2026-10-26",
       "title": "Say it your way",
       "highlights": [
-        { "icon": "💬", "title": "Custom trigger messages", "text": "Send your own text to a shortcut instead of the summary." },
-        { "icon": "🧩", "title": "Smart placeholders", "text": "Fill in the reason, time, trigger name or summary automatically." },
-        { "icon": "👀", "title": "Clear at a glance", "text": "The trigger list shows what each trigger will send." }
+        {
+          "icon": "💬",
+          "title": "Custom trigger messages",
+          "text": "Send your own text to a shortcut instead of the summary."
+        },
+        {
+          "icon": "🧩",
+          "title": "Smart placeholders",
+          "text": "Fill in the reason, time, trigger name or summary automatically."
+        },
+        {
+          "icon": "👀",
+          "title": "Clear at a glance",
+          "text": "The trigger list shows what each trigger will send."
+        }
       ],
       "changes": [
         "Per-trigger choice of Shortcut Input: the capture summary or a custom message"
@@ -138,9 +268,21 @@
       "date": "2026-10-25",
       "title": "Your iPhone as a smart camera",
       "highlights": [
-        { "icon": "📷", "title": "AI photo watch", "text": "Takes a photo every few seconds and has AI analyze it your way." },
-        { "icon": "⚡", "title": "Shortcut triggers", "text": "Run any Apple Shortcut when a condition you describe is met." },
-        { "icon": "🍎", "title": "OpenAI or Apple", "text": "Use any OpenAI model, or Apple Intelligence through Shortcuts." }
+        {
+          "icon": "📷",
+          "title": "AI photo watch",
+          "text": "Takes a photo every few seconds and has AI analyze it your way."
+        },
+        {
+          "icon": "⚡",
+          "title": "Shortcut triggers",
+          "text": "Run any Apple Shortcut when a condition you describe is met."
+        },
+        {
+          "icon": "🍎",
+          "title": "OpenAI or Apple",
+          "text": "Use any OpenAI model, or Apple Intelligence through Shortcuts."
+        }
       ],
       "changes": [
         "Timed capture with a running or per-photo summary beside the latest photo",
