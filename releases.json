@@ -4,6 +4,34 @@
   "script": "VisionX.js",
   "releases": [
     {
+      "version": "1.17.0",
+      "date": "2026-10-29",
+      "title": "Sees. Understands. Acts.",
+      "highlights": [
+        {
+          "icon": "👁️",
+          "title": "A logo of its own",
+          "text": "The watching eye: a red record-dot pupil and a teal scan line."
+        },
+        {
+          "icon": "🎬",
+          "title": "Launch screen",
+          "text": "The eye draws itself and the tagline appears for about 2 seconds; tap to skip."
+        },
+        {
+          "icon": "✨",
+          "title": "Branded everywhere",
+          "text": "The logo sits in the header, on the idle Live tab and in the README."
+        }
+      ],
+      "changes": [
+        "New VisionX logo (watching eye): docs/logo.svg and a 1024 px app icon, docs/icon-1024.png",
+        "Launch screen shown for 2.4 s with a short animation and the tagline \"Sees. Understands. Acts.\"; tap to skip; still with Reduce Motion",
+        "Logo mark in the sticky header, the logo on the Live tab when no session runs, and at the top of the README"
+      ],
+      "fixes": []
+    },
+    {
       "version": "1.16.0",
       "date": "2026-10-29",
       "title": "Pick shortcuts, copy triggers",

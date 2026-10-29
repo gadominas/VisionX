@@ -2,6 +2,18 @@
 
 All notable changes to VisionX. Generated from `releases.json`; edit that file, not this one.
 
+## 1.17.0 (2026-10-29): Sees. Understands. Acts.
+
+- 👁️ **A logo of its own**: The watching eye: a red record-dot pupil and a teal scan line.
+- 🎬 **Launch screen**: The eye draws itself and the tagline appears for about 2 seconds; tap to skip.
+- ✨ **Branded everywhere**: The logo sits in the header, on the idle Live tab and in the README.
+
+**Changes**
+
+- New VisionX logo (watching eye): docs/logo.svg and a 1024 px app icon, docs/icon-1024.png
+- Launch screen shown for 2.4 s with a short animation and the tagline "Sees. Understands. Acts."; tap to skip; still with Reduce Motion
+- Logo mark in the sticky header, the logo on the Live tab when no session runs, and at the top of the README
+
 ## 1.16.0 (2026-10-29): Pick shortcuts, copy triggers
 
 - 📋 **Pick from your shortcuts**: Load your shortcut list once, then choose instead of typing exact names.

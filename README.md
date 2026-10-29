@@ -1,4 +1,7 @@
-# VisionX
+<p align="center"><img src="docs/logo.svg" width="112" alt="VisionX logo: an eye with a red record-dot pupil and a teal scan line"></p>
+
+<h1 align="center">VisionX</h1>
+<p align="center"><b>Sees. Understands. Acts.</b></p>
 
 **Your iPhone as a smart camera, built with [Scriptable](https://scriptable.app).** VisionX takes a photo every few seconds, has an AI model (Claude, OpenAI or Apple Intelligence) look at it with your own instructions, and keeps a live summary of what it sees. When something you care about happens, it runs an Apple Shortcut, so it can open a gate, send a notification or switch on a light.
 
@@ -9,8 +12,9 @@
   <img src="docs/screenshots/editor.png" width="200" alt="The expanded instructions editor with an AI-refined suggestion">
 </p>
 <p align="center">
-  <img src="docs/screenshots/live.png" width="260" alt="Live tab under the sticky header: live camera, the analyzed photo and its AI summary with a Markdown table and bars">
-  <img src="docs/screenshots/report.png" width="260" alt="A saved session's report: what happened and the session stats">
+  <img src="docs/screenshots/live.png" width="200" alt="Live tab under the sticky header: live camera, the analyzed photo and its AI summary with a Markdown table and bars">
+  <img src="docs/screenshots/launch.png" width="200" alt="Launch screen: the VisionX eye draws itself, then the tagline Sees. Understands. Acts.">
+  <img src="docs/screenshots/report.png" width="200" alt="A saved session's report: what happened and the session stats">
 </p>
 <p align="center"><sub>A known plate is read and the "Open Gate" shortcut runs · counting vehicles and plates over a session · setting up triggers · refining instructions with AI.<br>Screenshots of the app's real interface, rendered with a drawn test scene in place of the camera.</sub></p>
 

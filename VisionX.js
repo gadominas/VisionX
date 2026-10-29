@@ -28,7 +28,7 @@ const STORE_FILE = "vision-session.json"; // presets + settings, in Scriptable's
 // ───────── Version and in-app updates ─────────
 // This build's version. When releasing, bump it and add a matching entry to releases.json.
 // Keep these two lines exactly in this form (single quotes): the updater reads them from downloads.
-const VERSION = '1.16.0';
+const VERSION = '1.17.0';
 const APP_ID = 'visionx';   // unique per app, never changes
 const REPO_RAW = 'https://raw.githubusercontent.com/gadominas/VisionX/main/';
 const SCRIPT_FILE = 'VisionX.js';   // the script's file name in the repository
@@ -1225,6 +1225,35 @@ body:not(.d-tiny) .older img,body:not(.d-tiny) .older .placeholder{aspect-ratio:
 body:not(.d-tiny) .older .text{font-size:11px;-webkit-line-clamp:3;margin:4px 1px 0}
 body:not(.d-tiny) .older .meta{font-size:10px;margin-top:2px}
 body:not(.d-tiny) .older .text.md{max-height:4.6em;overflow:hidden;-webkit-mask-image:linear-gradient(#000 60%,transparent);mask-image:linear-gradient(#000 60%,transparent)}
+/* VisionX logo: watching eye (header mark, idle screen, launch screen) */
+.brand-name{display:flex;align-items:center;gap:9px}
+.brand-name .x{color:#E5383B}
+.brand-mark{width:30px;height:30px;border-radius:8px;background:#0E1116;flex:none;box-shadow:inset 0 0 0 1px rgba(246,247,249,.14)}
+.idleMark{display:block;width:76px;height:76px;margin:0 auto 14px;border-radius:18px;background:#0E1116}
+/* Launch screen: about 2.4 s, then fades; tap to skip */
+.splash{position:fixed;inset:0;z-index:90;background:#0E1116;color:#F6F7F9;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;animation:spOut .4s ease 2.4s forwards;cursor:pointer}
+.splash.gone{display:none}
+.spIcon{width:148px;height:148px;opacity:0;transform:scale(.86);animation:spIn .5s cubic-bezier(.2,.9,.3,1.2) .05s forwards}
+.spIcon svg{width:100%;height:100%;display:block;overflow:visible}
+.spCorner{fill:none;stroke:#F6F7F9;stroke-opacity:.35;stroke-width:7;stroke-linecap:round;stroke-linejoin:round;opacity:0;animation:spFade .4s ease .25s forwards}
+.spEye{fill:none;stroke:#F6F7F9;stroke-width:13;stroke-linejoin:round;stroke-dasharray:100;stroke-dashoffset:100;animation:spDraw .8s ease-in-out .15s forwards}
+.spPupil{fill:#E5383B;transform-box:fill-box;transform-origin:center;transform:scale(0);animation:spPop .45s cubic-bezier(.3,1.7,.5,1) .75s forwards}
+.spGlint{fill:#F6F7F9;opacity:0;animation:spFade .3s ease 1.05s forwards}
+.spScan{stroke:#2DD4BF;stroke-width:7;stroke-linecap:round;opacity:0;transform:translateX(-120px);animation:spScan 1s ease-in-out .95s forwards}
+.spWord{font:800 40px/1 var(--display,ui-rounded,-apple-system,system-ui,sans-serif);letter-spacing:-.02em;opacity:0;transform:translateY(10px);animation:spUp .45s ease 1.05s forwards}
+.spWord span{color:#E5383B}
+.spTag{font:600 15px/1.3 -apple-system,system-ui,sans-serif;letter-spacing:.06em;color:#9AA3AE;opacity:0;transform:translateY(8px);animation:spUp .45s ease 1.4s forwards}
+@keyframes spIn{to{opacity:1;transform:scale(1)}}
+@keyframes spFade{to{opacity:1}}
+@keyframes spDraw{to{stroke-dashoffset:0}}
+@keyframes spPop{to{transform:scale(1)}}
+@keyframes spScan{0%{opacity:0;transform:translateX(-120px)}15%{opacity:1}100%{opacity:1;transform:translateX(0)}}
+@keyframes spUp{to{opacity:1;transform:none}}
+@keyframes spOut{to{opacity:0;visibility:hidden}}
+@media (prefers-reduced-motion:reduce){
+  .splash *{animation:none!important;opacity:1!important;transform:none!important;stroke-dashoffset:0!important}
+  .splash{animation:spOut .3s ease 1.6s forwards!important}
+}
 /* Layers: modal 10, editor 20, update 30, Settings 50, AI settings 60 (it opens from Settings), toasts 70 */
 #cfgsheet{position:fixed;inset:0;z-index:50;background:var(--paper);color:var(--ink);transform:translateY(102%);visibility:hidden;transition:transform .28s ease,visibility 0s linear .28s;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;text-align:left}
 #cfgsheet.open{transform:none;visibility:visible;transition:transform .28s ease}
@@ -1284,9 +1313,20 @@ body:not(.d-tiny) .older .text.md{max-height:4.6em;overflow:hidden;-webkit-mask-
 </style>
 </head>
 <body class="d-${look.density}">
+  <div class="splash" id="splash" role="img" aria-label="VisionX. Sees. Understands. Acts.">
+    <div class="spIcon"><svg viewBox="0 0 240 240" aria-hidden="true">
+      <path class="spCorner" d="M30 54 V30 H54"></path><path class="spCorner" d="M186 30 H210 V54"></path><path class="spCorner" d="M30 186 V210 H54"></path><path class="spCorner" d="M186 210 H210 V186"></path>
+      <path class="spEye" pathLength="100" d="M34 120 C70 72 170 72 206 120 C170 168 70 168 34 120 Z"></path>
+      <circle class="spPupil" cx="120" cy="120" r="25"></circle>
+      <circle class="spGlint" cx="129" cy="111" r="6"></circle>
+      <path class="spScan" d="M158 60 V180"></path>
+    </svg></div>
+    <div class="spWord">Vision<span>X</span></div>
+    <div class="spTag">Sees. Understands. Acts.</div>
+  </div>
   <header class="hdr" id="hdr">
     <div class="brand">
-      <span class="brand-name">VisionX</span>
+      <span class="brand-name"><svg class="brand-mark" viewBox="0 0 240 240" aria-hidden="true"><path d="M34 120 C70 72 170 72 206 120 C170 168 70 168 34 120 Z" fill="none" stroke="#F6F7F9" stroke-width="13" stroke-linejoin="round"></path><circle cx="120" cy="120" r="25" fill="#E5383B"></circle><circle cx="129" cy="111" r="6" fill="#F6F7F9"></circle><path d="M158 60 V180" stroke="#2DD4BF" stroke-width="7" stroke-linecap="round"></path></svg><span>Vision<span class="x">X</span></span></span>
       <button type="button" class="hbtn solid go" id="hStart" aria-label="Start session"></button>
       <button type="button" class="hbtn solid hidden" id="hPause" aria-label="Pause session"></button>
       <button type="button" class="hbtn solid hidden" id="hStop" aria-label="Stop session"></button>
@@ -1463,6 +1503,7 @@ body:not(.d-tiny) .older .text.md{max-height:4.6em;overflow:hidden;-webkit-mask-
 
   <div id="view-live" class="view hidden" role="tabpanel" aria-labelledby="tab-live">
   <div id="liveIdle" class="liveIdle">
+    <svg class="idleMark" viewBox="0 0 240 240" role="img" aria-label="VisionX logo"><path d="M30 54 V30 H54" fill="none" stroke="#F6F7F9" stroke-opacity="0.35" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"></path><path d="M186 30 H210 V54" fill="none" stroke="#F6F7F9" stroke-opacity="0.35" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"></path><path d="M30 186 V210 H54" fill="none" stroke="#F6F7F9" stroke-opacity="0.35" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"></path><path d="M186 210 H210 V186" fill="none" stroke="#F6F7F9" stroke-opacity="0.35" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"></path><path d="M34 120 C70 72 170 72 206 120 C170 168 70 168 34 120 Z" fill="none" stroke="#F6F7F9" stroke-width="13" stroke-linejoin="round"></path><circle cx="120" cy="120" r="25" fill="#E5383B"></circle><circle cx="129" cy="111" r="6" fill="#F6F7F9"></circle><path d="M158 60 V180" stroke="#2DD4BF" stroke-width="7" stroke-linecap="round"></path></svg>
     <p>No session is running.</p>
     <button type="button" class="btn" id="liveStart">Start session</button>
   </div>
@@ -2016,6 +2057,13 @@ const PAGE_JS = String.raw`
   applyLook();
   $("toggle").addEventListener("click", () => (S.running ? endSession() : startSession()));
   wireTabs();
+  (function () {
+    const sp = $("splash");
+    if (!sp) return;
+    const gone = () => { sp.classList.add("gone"); sp.setAttribute("aria-hidden", "true"); };
+    sp.addEventListener("click", gone);
+    setTimeout(gone, 2900);
+  })();
   wireControls();
   $("mClose").addEventListener("click", () => { $("modal").classList.add("hidden"); showQueuedUpdate(); });
   $("verLine").textContent = "VisionX v" + BOOT.version;
