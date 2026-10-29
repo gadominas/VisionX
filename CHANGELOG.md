@@ -2,6 +2,20 @@
 
 All notable changes to VisionX. Generated from `releases.json`; edit that file, not this one.
 
+## 1.19.0 (2026-10-29): VisionX on your Home Screen
+
+- 🧩 **A real widget**: Add VisionX to your Home Screen: the live session, or your last one with its triggers and summary.
+- 🔒 **Lock Screen too**: Small, medium, large and three Lock Screen sizes, with the VisionX eye and name.
+- 🛡️ **No more errors**: The widget no longer shows Scriptable's error text; it works offline and never shows photos.
+
+**Changes**
+
+- New Home Screen and Lock Screen widget in the shared frame (app-blueprints · widgets 1.0.0): logo tile, name, one hero, rows and a footer on the VisionX ground
+- While a session runs, the widget shows ● Live, the preset, the interval and the photos so far; otherwise the last session with the shortcuts that ran and its ✦ summary
+- A widget run no longer starts the app, so it can't fail with "Presenting a configured web view is not supported"
+- Settings › Widget: how often to ask iOS to refresh, and when to mark the widget out of date
+- Settings › Built with lists the widgets blueprint
+
 ## 1.18.0 (2026-10-29): More room while you capture
 
 - 🧹 **Cleaner header**: Tabs and the status line hide while a session runs and return when it stops.
