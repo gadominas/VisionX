@@ -28,7 +28,7 @@ const STORE_FILE = "vision-session.json"; // presets + settings, in Scriptable's
 // ───────── Version and in-app updates ─────────
 // This build's version. When releasing, bump it and add a matching entry to releases.json.
 // Keep these two lines exactly in this form (single quotes): the updater reads them from downloads.
-const VERSION = '1.17.0';
+const VERSION = '1.17.1';
 const APP_ID = 'visionx';   // unique per app, never changes
 const REPO_RAW = 'https://raw.githubusercontent.com/gadominas/VisionX/main/';
 const SCRIPT_FILE = 'VisionX.js';   // the script's file name in the repository
@@ -43,6 +43,7 @@ const BLUEPRINTS = [
   { id: 'in-app-updates', name: 'In-app updates', version: '1.0.0', since: '1.7.0' },
   { id: 'settings', name: 'Settings', version: '1.0.0', since: '1.9.0' },
   { id: 'ai-configuration', name: 'AI configuration', version: '1.0.0', since: '1.8.0' },
+  { id: 'launch-screen', name: 'Launch screen', version: '1.0.0', since: '1.17.1' },
 ];
 
 // ───────── Settings (app-blueprints · settings) ─────────
@@ -1230,24 +1231,27 @@ body:not(.d-tiny) .older .text.md{max-height:4.6em;overflow:hidden;-webkit-mask-
 .brand-name .x{color:#E5383B}
 .brand-mark{width:30px;height:30px;border-radius:8px;background:#0E1116;flex:none;box-shadow:inset 0 0 0 1px rgba(246,247,249,.14)}
 .idleMark{display:block;width:76px;height:76px;margin:0 auto 14px;border-radius:18px;background:#0E1116}
-/* Launch screen: about 2.4 s, then fades; tap to skip */
-.splash{position:fixed;inset:0;z-index:90;background:#0E1116;color:#F6F7F9;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;animation:spOut .4s ease 2.4s forwards;cursor:pointer}
+/* Launch screen (app-blueprints · launch-screen 1.0.0) */
+.splash{--sp-bg:#0E1116;--sp-ink:#F6F7F9;--sp-accent:#E5383B;--sp-accent2:#2DD4BF;--sp-muted:#9AA3AE;--sp-font:var(--display);
+  position:fixed;inset:0;z-index:90;background:var(--sp-bg);color:var(--sp-ink);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;cursor:pointer;
+  animation:spOut .4s ease 2.4s forwards}
 .splash.gone{display:none}
 .spIcon{width:148px;height:148px;opacity:0;transform:scale(.86);animation:spIn .5s cubic-bezier(.2,.9,.3,1.2) .05s forwards}
 .spIcon svg{width:100%;height:100%;display:block;overflow:visible}
-.spCorner{fill:none;stroke:#F6F7F9;stroke-opacity:.35;stroke-width:7;stroke-linecap:round;stroke-linejoin:round;opacity:0;animation:spFade .4s ease .25s forwards}
-.spEye{fill:none;stroke:#F6F7F9;stroke-width:13;stroke-linejoin:round;stroke-dasharray:100;stroke-dashoffset:100;animation:spDraw .8s ease-in-out .15s forwards}
-.spPupil{fill:#E5383B;transform-box:fill-box;transform-origin:center;transform:scale(0);animation:spPop .45s cubic-bezier(.3,1.7,.5,1) .75s forwards}
-.spGlint{fill:#F6F7F9;opacity:0;animation:spFade .3s ease 1.05s forwards}
-.spScan{stroke:#2DD4BF;stroke-width:7;stroke-linecap:round;opacity:0;transform:translateX(-120px);animation:spScan 1s ease-in-out .95s forwards}
-.spWord{font:800 40px/1 var(--display,ui-rounded,-apple-system,system-ui,sans-serif);letter-spacing:-.02em;opacity:0;transform:translateY(10px);animation:spUp .45s ease 1.05s forwards}
-.spWord span{color:#E5383B}
-.spTag{font:600 15px/1.3 -apple-system,system-ui,sans-serif;letter-spacing:.06em;color:#9AA3AE;opacity:0;transform:translateY(8px);animation:spUp .45s ease 1.4s forwards}
+.spFrame{fill:none;stroke:var(--sp-ink);stroke-opacity:.35;stroke-width:7;stroke-linecap:round;stroke-linejoin:round;opacity:0;animation:spFade .4s ease .25s forwards}
+.spDraw{fill:none;stroke:var(--sp-ink);stroke-width:13;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:100;stroke-dashoffset:100;animation:spDraw .8s ease-in-out .15s forwards}
+.spPop{fill:var(--sp-accent);transform-box:fill-box;transform-origin:center;transform:scale(0);animation:spPop .45s cubic-bezier(.3,1.7,.5,1) .75s forwards}
+.spDetail{fill:var(--sp-ink);opacity:0;animation:spFade .3s ease 1.05s forwards}
+.spSweep{fill:none;stroke:var(--sp-accent2);stroke-width:7;stroke-linecap:round;opacity:0;transform:translateX(var(--sp-sweep-from,-120px));animation:spSweep 1s ease-in-out .95s forwards}
+.spWord{font:800 40px/1 var(--sp-font,ui-rounded,-apple-system,system-ui,sans-serif);letter-spacing:-.02em;opacity:0;transform:translateY(10px);animation:spUp .45s ease 1.05s forwards}
+.spWord span{color:var(--sp-accent)}
+.spTag{font:600 15px/1.3 -apple-system,system-ui,sans-serif;letter-spacing:.06em;color:var(--sp-muted);opacity:0;transform:translateY(8px);animation:spUp .45s ease 1.4s forwards}
 @keyframes spIn{to{opacity:1;transform:scale(1)}}
 @keyframes spFade{to{opacity:1}}
 @keyframes spDraw{to{stroke-dashoffset:0}}
 @keyframes spPop{to{transform:scale(1)}}
-@keyframes spScan{0%{opacity:0;transform:translateX(-120px)}15%{opacity:1}100%{opacity:1;transform:translateX(0)}}
+@keyframes spSweep{0%{opacity:0}15%{opacity:1}100%{opacity:1;transform:translateX(0)}}
 @keyframes spUp{to{opacity:1;transform:none}}
 @keyframes spOut{to{opacity:0;visibility:hidden}}
 @media (prefers-reduced-motion:reduce){
@@ -1315,11 +1319,11 @@ body:not(.d-tiny) .older .text.md{max-height:4.6em;overflow:hidden;-webkit-mask-
 <body class="d-${look.density}">
   <div class="splash" id="splash" role="img" aria-label="VisionX. Sees. Understands. Acts.">
     <div class="spIcon"><svg viewBox="0 0 240 240" aria-hidden="true">
-      <path class="spCorner" d="M30 54 V30 H54"></path><path class="spCorner" d="M186 30 H210 V54"></path><path class="spCorner" d="M30 186 V210 H54"></path><path class="spCorner" d="M186 210 H210 V186"></path>
-      <path class="spEye" pathLength="100" d="M34 120 C70 72 170 72 206 120 C170 168 70 168 34 120 Z"></path>
-      <circle class="spPupil" cx="120" cy="120" r="25"></circle>
-      <circle class="spGlint" cx="129" cy="111" r="6"></circle>
-      <path class="spScan" d="M158 60 V180"></path>
+      <path class="spFrame" d="M30 54 V30 H54"></path><path class="spFrame" d="M186 30 H210 V54"></path><path class="spFrame" d="M30 186 V210 H54"></path><path class="spFrame" d="M186 210 H210 V186"></path>
+      <path class="spDraw" pathLength="100" d="M34 120 C70 72 170 72 206 120 C170 168 70 168 34 120 Z"></path>
+      <circle class="spPop" cx="120" cy="120" r="25"></circle>
+      <circle class="spDetail" cx="129" cy="111" r="6"></circle>
+      <path class="spSweep" d="M158 60 V180"></path>
     </svg></div>
     <div class="spWord">Vision<span>X</span></div>
     <div class="spTag">Sees. Understands. Acts.</div>
@@ -1641,6 +1645,14 @@ window.addEventListener("error", function (e) {
 // Scriptable returns garbled source from Function.prototype.toString().
 // String.raw keeps "\n" escapes intact; this block must contain no backticks or ${.
 const PAGE_JS = String.raw`
+// Launch screen (app-blueprints · launch-screen 1.0.0): first, self-contained
+(function () {
+  var sp = document.getElementById("splash");
+  if (!sp) return;
+  function gone() { sp.classList.add("gone"); sp.setAttribute("aria-hidden", "true"); }
+  sp.addEventListener("click", gone);   // tap to skip
+  setTimeout(gone, 2900);               // out of the page once the CSS fade is done
+})();
 (function (BOOT) {
   "use strict";
   const $ = (id) => document.getElementById(id);
@@ -2057,13 +2069,6 @@ const PAGE_JS = String.raw`
   applyLook();
   $("toggle").addEventListener("click", () => (S.running ? endSession() : startSession()));
   wireTabs();
-  (function () {
-    const sp = $("splash");
-    if (!sp) return;
-    const gone = () => { sp.classList.add("gone"); sp.setAttribute("aria-hidden", "true"); };
-    sp.addEventListener("click", gone);
-    setTimeout(gone, 2900);
-  })();
   wireControls();
   $("mClose").addEventListener("click", () => { $("modal").classList.add("hidden"); showQueuedUpdate(); });
   $("verLine").textContent = "VisionX v" + BOOT.version;

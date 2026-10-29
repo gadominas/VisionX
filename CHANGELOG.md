@@ -2,6 +2,17 @@
 
 All notable changes to VisionX. Generated from `releases.json`; edit that file, not this one.
 
+## 1.17.1 (2026-10-29): Launch screen, now shared
+
+- 🎬 **Same launch screen**: The eye still draws itself and the tagline appears; nothing changes for you.
+- 🧩 **A shared blueprint**: The launch screen is now the launch-screen blueprint, shared by all the apps.
+- 📋 **Built with**: Settings › Built with lists the Launch screen blueprint.
+
+**Changes**
+
+- Launch screen code aligned with the shared launch-screen blueprint 1.0.0 (generic part names, colour variables, script first in the page)
+- Blueprint trace: BLUEPRINTS block, Settings › Built with and docs/BLUEPRINTS.md list launch-screen 1.0.0
+
 ## 1.17.0 (2026-10-29): Sees. Understands. Acts.
 
 - 👁️ **A logo of its own**: The watching eye: a red record-dot pupil and a teal scan line.

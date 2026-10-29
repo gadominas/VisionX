@@ -4,6 +4,33 @@
   "script": "VisionX.js",
   "releases": [
     {
+      "version": "1.17.1",
+      "date": "2026-10-29",
+      "title": "Launch screen, now shared",
+      "highlights": [
+        {
+          "icon": "🎬",
+          "title": "Same launch screen",
+          "text": "The eye still draws itself and the tagline appears; nothing changes for you."
+        },
+        {
+          "icon": "🧩",
+          "title": "A shared blueprint",
+          "text": "The launch screen is now the launch-screen blueprint, shared by all the apps."
+        },
+        {
+          "icon": "📋",
+          "title": "Built with",
+          "text": "Settings › Built with lists the Launch screen blueprint."
+        }
+      ],
+      "changes": [
+        "Launch screen code aligned with the shared launch-screen blueprint 1.0.0 (generic part names, colour variables, script first in the page)",
+        "Blueprint trace: BLUEPRINTS block, Settings › Built with and docs/BLUEPRINTS.md list launch-screen 1.0.0"
+      ],
+      "fixes": []
+    },
+    {
       "version": "1.17.0",
       "date": "2026-10-29",
       "title": "Sees. Understands. Acts.",
