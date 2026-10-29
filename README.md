@@ -48,6 +48,7 @@
 - **Session stats.** At the end you see the duration, photos taken, requests sent, tokens used, and how many times each trigger fired.
 - **Claude, OpenAI or Apple Intelligence.** Pick any model your Claude or OpenAI key can use in **AI settings**, test the connection and see your token usage per day, feature and model. Or use Apple Intelligence through Shortcuts with no API key.
 - **Settings** (sliders icon at the top): colours (Auto or six palettes, VisionX teal in all), layout (Comfortable, Compact, or Tiny: older photos as one line each, tap to expand), text size and headline font, AI settings, update checks, and Capture limits (AI request time limit, photos kept on screen and in Debug) with Reset. Saved in iCloud Drive › Scriptable › VisionX › `settings.json`; presets, triggers and session choices stay in `vision-session.json` on this iPhone. **Built with** links to the [shared blueprints](https://github.com/gadominas/app-blueprints) VisionX follows ([docs/BLUEPRINTS.md](docs/BLUEPRINTS.md)).
+- **Launch screen.** VisionX opens on its logo for 2.4 seconds: the eye draws itself, then "Sees. Understands. Acts." Tap to skip; with Reduce Motion it appears without movement. It is the shared [launch-screen](https://github.com/gadominas/app-blueprints/blob/main/blueprints/launch-screen.md) blueprint, so all the apps start the same way.
 
 ## Use cases
 
@@ -159,6 +160,7 @@ The full history is in [CHANGELOG.md](CHANGELOG.md). Versions before 1.7.0 can't
 ## Notes
 
 - Claude and OpenAI calls go through Scriptable's native networking and one shared AI call, set up like the other apps (see [app-blueprints](https://github.com/gadominas/app-blueprints) and [docs/BLUEPRINTS.md](docs/BLUEPRINTS.md)).
+- VisionX follows four shared blueprints: in-app updates, settings, AI configuration and launch screen. **Settings › Built with** lists them with their versions; [docs/BLUEPRINTS.md](docs/BLUEPRINTS.md) adds the deviations.
 - Token counts are shown for Claude and OpenAI, per session and in **AI settings › Token usage**. Apple doesn't report them.
 - Apple Intelligence is asked for a simple labelled reply (FRAME, SUMMARY, STATE). VisionX also reads JSON, fenced JSON and bold labels, and if a reply can't be read at all, it's shown as the summary rather than leaving it empty.
 - How well it reads plates, counts and judges conditions depends on the model, the light and the camera angle. Test a setup before relying on it.

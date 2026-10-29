@@ -20,6 +20,8 @@
   VisionX checks GitHub for new versions when it opens (Settings › Updates).
   Claude and OpenAI keys, models and token usage live under Settings › AI settings
   (github.com/gadominas/app-blueprints · ai-configuration). Keys stay in the iOS Keychain.
+  Opens on a 2.4 s launch screen with the VisionX eye (app-blueprints · launch-screen).
+  The BLUEPRINTS block below lists every shared blueprint this app follows (Settings › Built with).
 */
 
 const DEFAULT_SHORTCUT = "Vision Session AI";
