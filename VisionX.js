@@ -30,7 +30,7 @@ const STORE_FILE = "vision-session.json"; // presets + settings, in Scriptable's
 // ───────── Version and in-app updates ─────────
 // This build's version. When releasing, bump it and add a matching entry to releases.json.
 // Keep these two lines exactly in this form (single quotes): the updater reads them from downloads.
-const VERSION = '1.17.1';
+const VERSION = '1.18.0';
 const APP_ID = 'visionx';   // unique per app, never changes
 const REPO_RAW = 'https://raw.githubusercontent.com/gadominas/VisionX/main/';
 const SCRIPT_FILE = 'VisionX.js';   // the script's file name in the repository
@@ -1260,6 +1260,26 @@ body:not(.d-tiny) .older .text.md{max-height:4.6em;overflow:hidden;-webkit-mask-
   .splash *{animation:none!important;opacity:1!important;transform:none!important;stroke-dashoffset:0!important}
   .splash{animation:spOut .3s ease 1.6s forwards!important}
 }
+/* While a session runs: no tabs or status line; the photo row sticks under the header and halves on scroll */
+body.sess .hdr .tabs,body.sess .hdr .hstat{display:none}
+body.sess .hdr .brand{padding-bottom:8px}
+body.sess .hdr.stuck{box-shadow:none}
+body.sess #liveOn{min-height:calc(100vh + 200px)}
+#liveSentinel{height:0}
+.liveGrid{position:sticky;top:var(--hdrH,0px);z-index:14;background:var(--paper);margin:0 -16px;padding:8px 16px 8px;transition:box-shadow .2s}
+.liveGrid.sized .livePane .liveWrap,.liveGrid.sized .liveApple,.liveGrid.sized .nowPhoto,.liveGrid.sized .lastPhoto{aspect-ratio:auto;height:var(--tileH);transition:height .25s ease}
+.liveGrid.sized.mini .livePane .liveWrap,.liveGrid.sized.mini .liveApple,.liveGrid.sized.mini .nowPhoto,.liveGrid.sized.mini .lastPhoto{height:calc(var(--tileH) * .5)}
+.liveGrid.mini{box-shadow:0 8px 18px -12px rgba(0,0,0,.55);border-bottom:1px solid var(--rule)}
+.liveGrid.mini figcaption{display:none}
+.liveGrid.mini .anlBox{width:38px;height:38px;top:44%}
+.liveGrid.mini .anlPct{font-size:10px}
+.liveGrid.mini .anlTxt,.liveGrid.mini .inSum{padding:6px 2px 3px;font-size:9px}
+.liveGrid.mini .nowWait{font-size:10px;padding:4px}
+.liveGrid.mini .nowWait b{font-size:16px;margin-bottom:2px}
+.liveGrid.mini .zoomChips{bottom:4px}
+.liveGrid.mini .zoomChips button{height:22px;min-width:24px;font-size:10px}
+.liveGrid.mini .liveTag,.liveGrid.mini .nowBadge{top:4px;left:4px;font-size:9px;padding:1px 5px}
+@media (prefers-reduced-motion:reduce){.liveGrid.sized .livePane .liveWrap,.liveGrid.sized .liveApple,.liveGrid.sized .nowPhoto,.liveGrid.sized .lastPhoto{transition:none}}
 /* Layers: modal 10, editor 20, update 30, Settings 50, AI settings 60 (it opens from Settings), toasts 70 */
 #cfgsheet{position:fixed;inset:0;z-index:50;background:var(--paper);color:var(--ink);transform:translateY(102%);visibility:hidden;transition:transform .28s ease,visibility 0s linear .28s;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;text-align:left}
 #cfgsheet.open{transform:none;visibility:visible;transition:transform .28s ease}
@@ -1514,6 +1534,7 @@ body:not(.d-tiny) .older .text.md{max-height:4.6em;overflow:hidden;-webkit-mask-
     <button type="button" class="btn" id="liveStart">Start session</button>
   </div>
   <div id="liveOn" class="hidden">
+  <div id="liveSentinel" aria-hidden="true"></div>
   <div class="liveGrid">
     <figure class="livePane">
       <div class="liveWrap" id="liveWrap"><video id="live" class="live" playsinline muted autoplay></video><span class="liveTag">Live</span>
@@ -3084,6 +3105,7 @@ const PAGE_JS = String.raw`
     $("hPause").setAttribute("aria-label", paused ? "Resume session" : "Pause session");
     $("hPause").classList.toggle("resume", !!paused);
     $("statusBox").classList.toggle("paused", !!paused);
+    sessChrome();
   }
   function pauseSession() {
     const sess = S;
@@ -3111,6 +3133,34 @@ const PAGE_JS = String.raw`
   function pausedMs(sess) {
     return (sess.stats.paused || 0) + (sess.paused && sess.pausedAt ? Date.now() - sess.pausedAt : 0);
   }
+  // ── while a session runs: tabs and status line hidden; the photo row sticks and halves on scroll ──
+  function sessChrome() {
+    document.body.classList.toggle("sess", !!S.running);
+    requestAnimationFrame(sizeLiveRow);
+  }
+  function sizeLiveRow() {
+    const hdr = $("hdr"), g = document.querySelector(".liveGrid");
+    if (!hdr || !g) return;
+    document.documentElement.style.setProperty("--hdrH", Math.max(0, Math.round(hdr.getBoundingClientRect().height) - 1) + "px");
+    const cs = getComputedStyle(g);
+    const w = g.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+    if (w > 0) {
+      const gap = parseFloat(cs.columnGap) || 8;
+      g.style.setProperty("--tileH", Math.round(((w - 2 * gap) / 3) * 4 / 3) + "px");
+      g.classList.add("sized");
+    }
+    miniCheck();
+  }
+  // Halves once the row has stuck and the page moved on 40 px; grows back near where it stuck.
+  function miniCheck() {
+    const g = document.querySelector(".liveGrid"), sen = $("liveSentinel");
+    if (!g || !sen) return;
+    if (!S.running || $("liveOn").classList.contains("hidden")) { g.classList.remove("mini"); return; }
+    const hdrH = $("hdr").getBoundingClientRect().height;
+    const top = sen.getBoundingClientRect().top;
+    if (!g.classList.contains("mini") && top < hdrH - 40) g.classList.add("mini");
+    else if (g.classList.contains("mini") && top > hdrH - 4) g.classList.remove("mini");
+  }
   function wireControls() {
     $("hStart").innerHTML = ICON_PLAY;
     $("hStop").innerHTML = ICON_STOP;
@@ -3120,6 +3170,8 @@ const PAGE_JS = String.raw`
     const hdr = $("hdr");
     const stuck = () => hdr.classList.toggle("stuck", window.scrollY > 4);
     window.addEventListener("scroll", stuck, { passive: true });
+    window.addEventListener("scroll", miniCheck, { passive: true });
+    window.addEventListener("resize", () => requestAnimationFrame(sizeLiveRow));
     stuck();
     updateControls();
   }
@@ -3357,6 +3409,7 @@ const PAGE_JS = String.raw`
       tab.tabIndex = v === name ? 0 : -1;
     });
     window.scrollTo(0, 0);
+    if (name === "live") requestAnimationFrame(sizeLiveRow);
   }
   function renderTabs() {
     $("tab-live").innerHTML = (S.running ? '<span class="recdot' + (S.paused ? " held" : "") + '" aria-hidden="true"></span>' : "") + "Live";

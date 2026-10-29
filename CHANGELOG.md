@@ -2,6 +2,18 @@
 
 All notable changes to VisionX. Generated from `releases.json`; edit that file, not this one.
 
+## 1.18.0 (2026-10-29): More room while you capture
+
+- 🧹 **Cleaner header**: Tabs and the status line hide while a session runs and return when it stops.
+- 📌 **Photos stay in view**: The live, analyzing and analyzed photos stay pinned at the top as you scroll.
+- ↕️ **Half size on scroll**: Scroll down and the photo row shrinks to half its height; scroll up and it grows back.
+
+**Changes**
+
+- While a session runs (or is paused), the tabs and status line are hidden; they come back when it stops
+- The photo row (Live, Analyzing, Analyzed) sticks under the header
+- Scrolling down shrinks the row to half its height, hides its captions and adds a shadow; scrolling back to the top restores it
+
 ## 1.17.1 (2026-10-29): Launch screen, now shared
 
 - 🎬 **Same launch screen**: The eye still draws itself and the tagline appears; nothing changes for you.

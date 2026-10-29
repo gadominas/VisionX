@@ -4,6 +4,34 @@
   "script": "VisionX.js",
   "releases": [
     {
+      "version": "1.18.0",
+      "date": "2026-10-29",
+      "title": "More room while you capture",
+      "highlights": [
+        {
+          "icon": "🧹",
+          "title": "Cleaner header",
+          "text": "Tabs and the status line hide while a session runs and return when it stops."
+        },
+        {
+          "icon": "📌",
+          "title": "Photos stay in view",
+          "text": "The live, analyzing and analyzed photos stay pinned at the top as you scroll."
+        },
+        {
+          "icon": "↕️",
+          "title": "Half size on scroll",
+          "text": "Scroll down and the photo row shrinks to half its height; scroll up and it grows back."
+        }
+      ],
+      "changes": [
+        "While a session runs (or is paused), the tabs and status line are hidden; they come back when it stops",
+        "The photo row (Live, Analyzing, Analyzed) sticks under the header",
+        "Scrolling down shrinks the row to half its height, hides its captions and adds a shadow; scrolling back to the top restores it"
+      ],
+      "fixes": []
+    },
+    {
       "version": "1.17.1",
       "date": "2026-10-29",
       "title": "Launch screen, now shared",
