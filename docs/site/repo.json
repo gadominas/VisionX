@@ -18,5 +18,9 @@
     "license-plate-recognition",
     "object-counting",
     "home-automation"
-  ]
+  ],
+  "install": {
+    "kept": "Your presets, triggers and settings are kept.",
+    "firstRun": "Apple Intelligence works straight away; for Claude or OpenAI, add a key in Settings › AI settings."
+  }
 }

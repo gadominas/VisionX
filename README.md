@@ -74,7 +74,7 @@ Your iPhone as an AI smart camera: it takes a photo every few seconds, has Claud
    ```
 3. Tap **Open VisionX**. Apple Intelligence works straight away. To use Claude or OpenAI, tap the **sliders icon** at the top, then **AI settings**, and add your own key (typed into a native iOS prompt and kept in the iOS Keychain).
 
-To update, run *VisionX Installer* again; presets, triggers and settings are kept.
+To update, tap **Update now** when VisionX offers a new version, or run *VisionX Installer* again. Your presets, triggers and settings are kept.
 
 <details>
 <summary><b>Install by hand</b></summary>
