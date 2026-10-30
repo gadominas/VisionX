@@ -2,6 +2,18 @@
 
 All notable changes to VisionX. Generated from `releases.json`; edit that file, not this one.
 
+## 1.22.0 (2026-10-31): Anonymous usage, if you agree
+
+- 📊 **Help shape VisionX**: If you agree, VisionX sends anonymous counts of the features you use. Nothing else.
+- 🔒 **Anonymous by design**: A random ID made on your phone, never your content, names or accounts.
+- 🎛️ **Your choice, any time**: Settings › Privacy turns it on or off, and Send test shows what happened.
+
+**Changes**
+
+- Anonymous usage analytics (app-blueprints · usage-analytics 1.1.0): opt-in, anonymous counts to PostHog's US cloud, with a one-time question and Settings › Privacy (switch and Send test)
+- Events: app_open (layout, theme, ai_key, engine), session_started (engine), session_finished (photos, analysed, triggers: counts), trigger_fired, result_copied, app_updated
+- Never sent: photos, instructions, presets, AI answers, Shortcut names or anything a trigger sends
+
 ## 1.21.0 (2026-10-31): Clearer Settings
 
 - 🗂️ **Sections you can see**: Each Settings section now sits in its own card, so you can tell where it starts and ends.
