@@ -31,7 +31,7 @@ const STORE_FILE = "vision-session.json"; // presets + settings, in Scriptable's
 // ───────── Version and in-app updates ─────────
 // This build's version. When releasing, bump it and add a matching entry to releases.json.
 // Keep these two lines exactly in this form (single quotes): the updater reads them from downloads.
-const VERSION = '1.19.0';
+const VERSION = '1.19.1';
 const APP_ID = 'visionx';   // unique per app, never changes
 const REPO_RAW = 'https://raw.githubusercontent.com/gadominas/VisionX/main/';
 const SCRIPT_FILE = 'VisionX.js';   // the script's file name in the repository
@@ -3165,7 +3165,7 @@ const PAGE_JS = String.raw`
     const src = body.join("\n").replace(/^\s*%%.*$/gm, "").trim();
     const first = (src.split("\n")[0] || "").trim().toLowerCase();
     try {
-      if (lang === "stats" || lang === "kpi") return renderStats(src);
+      if (lang === "stats" || lang === "kpi") return renderStatTiles(src);
       if (lang && ["mermaid", "pie", "xychart", "xychart-beta", "chart"].indexOf(lang) === -1) return null;
       if (/^pie\b/.test(first)) return renderPie(src);
       if (lang === "pie") return renderPie("pie\n" + src);
@@ -3269,7 +3269,8 @@ const PAGE_JS = String.raw`
     const aria = (title ? title + ". " : "") + series.map((s) => (s.name ? s.name + ": " : "") + cats.slice(0, n).map((c, k) => c + " " + (isFinite(s.vals[k]) ? vxFmt(s.vals[k]) : "none")).join(", ")).join("; ");
     return vxFigure("vxXY", title, inner + keys, aria);
   }
-  function renderStats(src) {
+  // Headline-number tiles from a "stats" code block. Its own name: the session stats strip below is renderStats().
+  function renderStatTiles(src) {
     const tiles = [];
     src.split("\n").forEach((l) => {
       const t = l.replace(/^\s*[-*+]\s+/, "").trim();
