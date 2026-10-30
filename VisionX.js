@@ -22,6 +22,8 @@
   (github.com/gadominas/app-blueprints · ai-configuration). Keys stay in the iOS Keychain.
   Opens on a 2.4 s launch screen with the VisionX eye (app-blueprints · launch-screen).
   Its Home Screen and Lock Screen widget uses the shared widget frame (app-blueprints · widgets).
+  Without a Claude or OpenAI key (and with Apple Intelligence not in use), a short card invites you to turn AI on
+  (app-blueprints · ai-invitation). It opens on an empty window first and reads its data after (recipe safe-startup).
   The BLUEPRINTS block below lists every shared blueprint this app follows (Settings › Built with).
 */
 
@@ -31,7 +33,7 @@ const STORE_FILE = "vision-session.json"; // presets + settings, in Scriptable's
 // ───────── Version and in-app updates ─────────
 // This build's version. When releasing, bump it and add a matching entry to releases.json.
 // Keep these two lines exactly in this form (single quotes): the updater reads them from downloads.
-const VERSION = '1.19.1';
+const VERSION = '1.20.0';
 const APP_ID = 'visionx';   // unique per app, never changes
 const REPO_RAW = 'https://raw.githubusercontent.com/gadominas/VisionX/main/';
 const SCRIPT_FILE = 'VisionX.js';   // the script's file name in the repository
@@ -48,7 +50,19 @@ const BLUEPRINTS = [
   { id: 'ai-configuration', name: 'AI configuration', version: '1.0.0', since: '1.8.0' },
   { id: 'launch-screen', name: 'Launch screen', version: '1.0.0', since: '1.17.1' },
   { id: 'widgets', name: 'Widgets', version: '1.0.0', since: '1.19.0' },
+  { id: 'ai-invitation', name: 'AI invitation', version: '1.2.0', since: '1.20.0' },
 ];
+
+// ───────── AI invitation (app-blueprints · ai-invitation) ─────────
+// What the invitation promises. Exactly three perks, each a real feature that needs a key.
+const AI_INVITE = {
+  title: "Give VisionX superpowers",            // punchy, names the app, at most 32 characters
+  perks: [                                      // icon + at most 48 characters each
+    { icon: "✦", text: "Every photo described and summed up for you" },
+    { icon: "🎥", text: "Hands-free capture with a live, zoomable view" },
+    { icon: "⚡", text: "Your shortcuts run the moment it spots a match" },
+  ],
+};
 
 // ───────── Settings (app-blueprints · settings) ─────────
 // Appearance, updates and tunables live in settings.json in iCloud Drive › Scriptable › VisionX.
@@ -56,15 +70,34 @@ const BLUEPRINTS = [
 const sfm = (() => { try { return FileManager.iCloud(); } catch (e) { return FileManager.local(); } })();
 const SET_DIR = sfm.joinPath(sfm.documentsDirectory(), "VisionX");
 const SP = (n) => sfm.joinPath(SET_DIR, n + ".json");
-async function load(n, def) {
+// A short start-up log on the phone (local, not iCloud): Settings › Updates › Start-up log, and on screen if opening stalls.
+const LOG_PATH = FileManager.local().joinPath(FileManager.local().documentsDirectory(), APP_ID + "-startup.log");
+function startLog(msg) {
+  try {
+    const lfm = FileManager.local(), line = new Date().toISOString().slice(11, 19) + "  " + msg;
+    const old = lfm.fileExists(LOG_PATH) ? lfm.readString(LOG_PATH).split("\n").slice(-60) : [];
+    lfm.writeString(LOG_PATH, old.concat(line).join("\n"));
+  } catch (e) {}
+}
+const loadIssues = [];   // files iCloud didn't hand over in time
+async function load(n, def, waitMs = 10000) {
   const p = SP(n);
   if (!sfm.fileExists(p)) return def;
   try {
-    if (sfm.isFileStoredIniCloud(p) && !sfm.isFileDownloaded(p)) await sfm.downloadFileFromiCloud(p);
+    if (sfm.isFileStoredIniCloud(p) && !sfm.isFileDownloaded(p)) {
+      // iCloud can take a long time (or forever, offline): never let start-up hang on it
+      await Promise.race([sfm.downloadFileFromiCloud(p), new Promise(r => Timer.schedule(waitMs, false, r))]);
+      if (!sfm.isFileDownloaded(p)) { loadIssues.push(n); startLog(`iCloud didn't deliver ${n}.json in ${waitMs / 1000} s`); return def; }
+    }
     return JSON.parse(sfm.readString(p));
-  } catch (e) { return def; }   // a broken file falls back to defaults, never crashes
+  } catch (e) { loadIssues.push(n); startLog(`Couldn't read ${n}.json: ${e}`); return def; }   // a broken file falls back to defaults, never crashes
 }
+// Settings that were never read are never saved over (set by loadSettings). VisionX's data files live on this
+// iPhone (vision-session.json, the sessions folder, visionx-usage.json); writeStore() and aiWrite() guard them.
+let settingsOk = false;
+let dataLoaded = false;
 const write = (n, v) => {
+  if (n === "settings" && !settingsOk) return false;
   try { if (!sfm.fileExists(SET_DIR)) sfm.createDirectory(SET_DIR, true); sfm.writeString(SP(n), JSON.stringify(v)); return true; }
   catch (e) { console.warn("Couldn't save " + n + ": " + e); return false; }
 };
@@ -96,6 +129,18 @@ async function loadSettings() {
   const d = { theme: "auto", density: "comfortable", font: "sans", textSize: 1 };
   for (const k of Object.keys(d)) if (!setSetting(k, settings[k])) settings[k] = d[k];
   settings.cfg = settings.cfg && typeof settings.cfg === "object" ? settings.cfg : {};
+  settingsOk = !loadIssues.includes("settings");   // settings that were never read are never saved over
+}
+// Data is read in loadData(): the app shows its first screen before reading it (safe-startup recipe).
+// Presets and triggers, the saved sessions and token usage; settings and AI settings are read before every branch.
+let store = null;        // vision-session.json: presets, triggers and the session picks (this iPhone)
+let sessions = [];       // saved sessions, newest first (index entries only)
+async function loadData() {
+  loadIssues.length = 0;
+  store = readStore();
+  sessions = sesIndex();             // read only: the app tidies the list in bootApp, the widget never deletes
+  usage = aiLoad("usage", usage);
+  dataLoaded = loadIssues.length === 0;   // anything missing: show what we have, save nothing over it
 }
 // Everything tunable lives here; the Settings screen edits these (stored in settings.cfg, defaults below).
 const CONFIG = [
@@ -552,6 +597,7 @@ function readStore() {
   try { return JSON.parse(fm.readString(path)); } catch (_) { return null; }
 }
 function writeStore(data) {
+  if (!dataLoaded) return;   // never save presets over a file that was never read
   FileManager.local().writeString(storePath(), JSON.stringify(data, null, 2));
 }
 
@@ -588,6 +634,7 @@ function aiLoad(name, fallback) {
   return fallback;
 }
 function aiWrite(name, data) {
+  if (name === "usage" && !dataLoaded) return;   // usage is read in loadData(): never save over it before
   try { aiFm.writeString(aiPath(name), JSON.stringify(data)); } catch (e) { console.log("AI: couldn't save " + name + ": " + e); }
 }
 const aiSettings = Object.assign({
@@ -679,7 +726,7 @@ function parseJSON(txt) {
 }
 
 // Token usage, counted from what the provider reports, per provider, model, feature and local day.
-let usage = aiLoad("usage", { since: Date.now(), p: {} });
+var usage = { since: Date.now(), p: {} };   // read in loadData()
 const aiDayKey = (d = new Date()) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
@@ -734,6 +781,7 @@ async function aiAction(head, m) {
       break;
     case "airm": removeKey(P); msg = `${PROVIDERS[P]} key removed`;
       if (!aiKey()) { const other = Object.keys(PROVIDERS).find(p => keyFor(p)); if (other) aiSettings.aiProvider = other; }
+      aiInviteKeyRemoved();   // the last key gone: the AI invitation may come back from the next launch
       break;
     case "aiprov": if (PROVIDERS[m.v] && keyFor(m.v)) aiSettings.aiProvider = m.v; break;
     case "aimodels":
@@ -777,6 +825,42 @@ function aiStatusLine() {
 }
 const aiFmtN = n => n >= 1e6 ? (n / 1e6).toFixed(2) + "M" : n >= 1e4 ? Math.round(n / 1e3) + "k" : n >= 1e3 ? (n / 1e3).toFixed(1) + "k" : String(n);
 // ─────────────── end of AI configuration ───────────────
+
+// ── AI invitation (app-blueprints · ai-invitation) ──
+// When it may appear. Its state lives in settings.json as settings.aiInvite (no UI of its own).
+const INVITE_DAY = 864e5;
+const INVITE_GAP = 3;          // days between invitations (about twice a week)
+const INVITE_GAP_SLOW = 7;     // days between invitations after the 4th "Later"
+function aiInviteDue(now = Date.now()) {
+  const s = settings.aiInvite || (settings.aiInvite = {});
+  if (aiKey()) return false;   // a key means AI is on: nothing to invite to
+  if (appleIntelligenceInUse()) return false;   // VisionX deviation: Apple Intelligence already does the AI, without a key
+  if (s.off) return false;     // "Don't remind me again"
+  return now >= (s.next || 0); // from the very first launch (right after install), then at most every 3 days
+}
+// VisionX deviation (docs/BLUEPRINTS.md): Apple Intelligence analyzes photos, refines instructions and checks
+// triggers through Shortcuts, with no key. While it is picked under "Analyze with" and has already worked
+// (a saved session with photos analyzed on it), AI is on for this user, so there is nothing to invite to.
+// "Analyze with" alone can't tell: without a key it always shows Apple Intelligence, set up or not.
+function appleIntelligenceInUse() {
+  const engine = (store && store.settings && store.settings.engine) || "apple";
+  return engine === "apple" && sessions.some((m) => m && m.engine === "Apple Intelligence" && m.photos > 0);
+}
+// Removing the last key turns AI off: invite again from the next launch (called in the "airm" action).
+function aiInviteKeyRemoved() {
+  if (aiKey()) return;
+  const s = settings.aiInvite || (settings.aiInvite = {});
+  s.next = 0; saveSettings();
+}
+// The page reports what happened: "shown", "open", "later" or "never".
+function aiInviteNote(what, now = Date.now()) {
+  const s = settings.aiInvite || (settings.aiInvite = {});
+  if (what === "shown") { s.shown = (s.shown || 0) + 1; s.next = now + INVITE_GAP * INVITE_DAY; }
+  else if (what === "later") { s.later = (s.later || 0) + 1; s.next = now + (s.later >= 4 ? INVITE_GAP_SLOW : INVITE_GAP) * INVITE_DAY; }
+  else if (what === "never") s.off = true;
+  else return;   // "open": the AI sheet takes over; "shown" already set the next date
+  saveSettings();
+}
 
 // Photo analysis, instruction refining and trigger checks all come here from the page.
 // p: { system, text, image (data URL), detail, maxTokens, feature }
@@ -869,6 +953,12 @@ async function handleBridgeCall(wv, ctx, id) {
       if (v === BLUEPRINTS_REPO || v.startsWith(BLUEPRINTS_REPO + "/")) await Safari.openInApp(v, false);
       result = true;
     }
+    else if (msg.type === "startlog") {   // Settings › Updates › Start-up log (safe-startup recipe)
+      let txt = "";
+      try { txt = FileManager.local().readString(LOG_PATH).split("\n").slice(-40).join("\n"); } catch (e) {}
+      result = txt;
+    }
+    else if (msg.type === "aiinvite") { aiInviteNote((msg.payload || {}).v); result = true; }   // AI invitation: shown, open, later or never
     else if (msg.type === "copy") { Pasteboard.copy(String(msg.payload.text || "")); result = true; }
     else if (msg.type === "updateLater") { snoozeUpdate(); ctx.update = null; result = true; }
     else if (msg.type === "updateNow") {
@@ -933,40 +1023,111 @@ async function runAppleShortcut(p) {
   return { text, photo };
 }
 
-async function main() {
-  // 1.7.x kept one OpenAI key (or a "use Apple Intelligence only" choice) under other names.
-  aiMigrate(["vision_session_openai_key"], null);
-  if (Keychain.contains("vision_session_openai_key_skipped")) Keychain.remove("vision_session_openai_key_skipped");
-  const ctx = {};
-  // The page never gets a key: only whether one is saved, and which provider and model are in use.
-  const boot = {
+// What the page boots from, handed over by bootApp() once the data is read (never inlined in buildHTML).
+// The page never gets a key: only whether one is saved, and which provider and model are in use.
+function clientState() {
+  return {
     ai: { hasKey: !!aiKey(), name: PROVIDERS[aiSettings.aiProvider], model: modelFor(aiSettings.aiProvider) },
     defaultShortcut: DEFAULT_SHORTCUT,
     version: VERSION,
-    store: readStore(),
+    store,
     look: lookState(),
     cfg: Object.fromEntries(CFG_FLAT.map((d) => [d.k, cfg(d.k)])),
-    sessions: (() => { try { return sessionList(); } catch (e) { return []; } })(),
+    sessions,
   };
-  const wv = new WebView();
+}
+const safeJSON = (v) => JSON.stringify(v).replace(/</g, "\\u003c").replace(/\u2028/g, "\\u2028").replace(/\u2029/g, "\\u2029");
+
+// ---------- run ----------
+// A run marks itself as open while its window is on screen. A new run waits at most 1.5 s for an older
+// window to close, then opens anyway: quick taps on the widget don't stack up copies.
+const lockFm = FileManager.local();
+const RUN_LOCK = lockFm.joinPath(lockFm.temporaryDirectory(), APP_ID + '-running');
+let lockTimer = null;
+const lockAge = () => { try { return lockFm.fileExists(RUN_LOCK) ? Date.now() - Number(lockFm.readString(RUN_LOCK)) : Infinity; } catch (e) { return Infinity; } };
+const pause = ms => new Promise(r => Timer.schedule(ms, false, r));
+async function waitForOtherWindow() { for (let waited = 0; lockAge() < 2500 && waited < 1500; waited += 300) await pause(300); }
+function holdLock() {
+  const beat = () => { try { lockFm.writeString(RUN_LOCK, String(Date.now())); } catch (e) {} };
+  beat(); lockTimer = Timer.schedule(1000, true, beat);
+}
+function releaseLock() {
+  if (lockTimer) { lockTimer.invalidate(); lockTimer = null; }
+  try { if (lockFm.fileExists(RUN_LOCK)) lockFm.remove(RUN_LOCK); } catch (e) {}
+}
+let wv = null;
+const ctx = {};          // the bridge's run state: ctx.update is the update on offer (VisionX's pendingUpdate)
+function buildWebView() {
+  wv = new WebView();
   attachBridge(wv, ctx);
-  // An https base URL gives the page a secure origin, which the camera API requires.
-  await wv.loadHTML(buildHTML(boot), "https://localhost/");
-  const shown = wv.present(true);
-  // Once per run, after the first screen is up, so it never slows the start.
-  Timer.schedule(1500, false, () => {
+}
+// Talks to the page with a time limit, so a stuck page can't stall the app.
+const ev = (js, ms = 20000) => Promise.race([wv.evaluateJavaScript(js, false), pause(ms).then(() => { throw new Error("the page didn't respond in " + ms / 1000 + " s"); })]);
+
+// One offer per launch, and an update wins: call this once the update check has settled.
+function inviteIfDue() {
+  if (!ctx.update && aiInviteDue()) ev(`window.__aiInvite && window.__aiInvite(${JSON.stringify(AI_INVITE)}); 'ok'`).catch(() => {});
+}
+
+async function bootApp(isClosed) {
+  const t0 = Date.now();
+  startLog(`VisionX ${VERSION}: reading data`);
+  await loadData();
+  // 1.7.x kept one OpenAI key (or a "use Apple Intelligence only" choice) under other names.
+  aiMigrate(["vision_session_openai_key"], null);
+  if (Keychain.contains("vision_session_openai_key_skipped")) Keychain.remove("vision_session_openai_key_skipped");
+  try { sessions = sessionList(); } catch (e) {}   // the app keeps only the last "Sessions kept"
+  startLog(`data read in ${((Date.now() - t0) / 1000).toFixed(1)} s: ${sessions.length} sessions, ${((store && store.presets) || []).length} presets${loadIssues.length ? "; missing: " + loadIssues.join(", ") : ""}`);
+  if (isClosed()) return;
+  const st = clientState(), list = st.sessions;
+  st.sessions = [];
+  for (let i = 0; i < list.length; i += 3) await ev(`window.__parts.push(${safeJSON(list.slice(i, i + 3))})`);   // in pieces: one huge message can stall WebKit
+  await ev(`window.__boot(${safeJSON(st)}); 'ok'`);
+  let seen = "";
+  try { seen = await ev(`document.visibilityState + ", " + innerWidth + "x" + innerHeight`, 5000); } catch (e) { seen = String(e.message || e); }
+  startLog(`screen ready in ${((Date.now() - t0) / 1000).toFixed(1)} s (page: ${seen})`);
+  if (loadIssues.length) ev(`window.__aiToast(${safeJSON("Some of your data is still coming from iCloud. Nothing will be saved until you reopen VisionX.")}); 'ok'`).catch(() => {});
+  // Deferred work, once the first screen is drawn (VisionX has no refresh of its own): updates, then the widget's icon.
+  Timer.schedule(3500, false, () => {
+    if (isClosed()) return;
     checkForUpdate().then((u) => {
       ctx.update = u;
-      if (u) wv.evaluateJavaScript("window.__showUpdate && window.__showUpdate(" + JSON.stringify(u) + "); 'ok'").catch(() => {});
-    });
+      if (u) return ev("window.__showUpdate && window.__showUpdate(" + JSON.stringify(u) + "); 'ok'");
+    }).catch(() => {}).then(inviteIfDue);   // AI invitation: after the update check, never with an offer
   });
-  await shown;
-  await saveOnClose(wv);
+  Timer.schedule(6000, false, () => { widgetIcon(); });   // caches the logo tile for the widget
+}
+
+async function main() {
+  await waitForOtherWindow();
+  buildWebView();
+  // A page built before its window is on screen can stay blank on some iPhones (the page runs, nothing is drawn),
+  // most often when opened from the widget. So: an empty dark window first, then the real page built inside it.
+  await wv.loadHTML('<html><head><meta name="viewport" content="width=device-width, initial-scale=1"></head><body style="margin:0;background:#0E1116"></body></html>');
+  const presented = wv.present(true);
+  holdLock();
+  await pause(300);                          // let the window finish appearing
+  startLog("window on screen");
+  // An https base URL gives the page a secure origin, which the camera API requires.
+  await Promise.race([wv.loadHTML(buildHTML(), "https://localhost/"), pause(15000)]);   // the launch screen, drawn on screen
+  let closed = false;
+  presented.then(() => { closed = true; releaseLock(); });
+  bootApp(() => closed).catch(e => {         // runs beside the window: closing it never waits on this
+    startLog("start-up failed: " + (e.message || e));
+    let log = "";
+    try { log = FileManager.local().readString(LOG_PATH).split("\n").slice(-12).join("\n"); } catch (x) {}
+    if (!closed) wv.evaluateJavaScript(`window.__bootNote("VisionX couldn't open", ${safeJSON(log)}); 'ok'`, false).catch(() => {});
+  });
+  await presented;
+  closed = true;
+  releaseLock();
+  await saveOnClose(wv);                     // writeStore() skips presets that were never read
 }
 
 // ───────────────────────────── Page ─────────────────────────────
 
-function buildHTML(boot) {
+// The page only: the data comes later through window.__boot (safe-startup recipe). Settings (the look) are loaded.
+function buildHTML() {
   const look = lookState();
   return `<!doctype html>
 <html lang="en" data-theme="${look.shown}" data-font="${look.font}" style="--ts:${look.textSize}">
@@ -1607,6 +1768,45 @@ body.sess #liveOn{min-height:calc(100vh + 200px)}
 #cfgsheet .srow.bp{width:100%;text-align:left}
 #cfgsheet .chev{flex:none;color:var(--muted);font-size:calc(20px * var(--ts));line-height:1}
 #cfgsheet input{-webkit-user-select:text;user-select:text}
+/* AI invitation (app-blueprints · ai-invitation): above Settings and the AI sheet, below the update sheet and the launch screen */
+#aiinv{position:fixed;inset:0;z-index:47;display:flex;align-items:center;justify-content:center;padding:24px;background:rgba(0,0,0,.45);animation:aiinvFade .25s ease both}
+#aiinv.out{animation:aiinvFadeOut .24s ease both}
+.aiinv-card{position:relative;width:100%;max-width:380px;background:var(--sheet);color:var(--ink);border:1px solid var(--rule);border-radius:24px;padding:26px 22px 16px;text-align:center;box-shadow:0 24px 60px rgba(0,0,0,.35);animation:aiinvUp .5s cubic-bezier(.2,.9,.3,1.2) both}
+#aiinv.out .aiinv-card{animation:aiinvDown .24s ease both}
+.aiinv-spark{width:56px;height:56px;margin:-4px auto 10px;border-radius:18px;display:grid;place-items:center;font-size:calc(30px * var(--ts));color:var(--signal);background:var(--signal-wash);animation:aiinvTwinkle 2.4s ease-in-out .5s infinite}
+#aiinv h2{margin:0 0 6px;font-family:var(--display);font-size:calc(23px * var(--ts));line-height:1.2;font-weight:800}
+.aiinv-lead{margin:0 0 14px;color:var(--ink-2);font-size:calc(15px * var(--ts))}
+.aiinv-perks{list-style:none;margin:0 0 14px;padding:0;text-align:left}
+.aiinv-perks li{display:flex;gap:10px;align-items:center;padding:9px 12px;margin-bottom:6px;border-radius:12px;background:var(--signal-wash);font-size:calc(15px * var(--ts));font-weight:600;animation:aiinvPerk .4s ease both;animation-delay:calc(.25s + var(--i) * .09s)}
+.aiinv-ico{flex:none;width:22px;text-align:center}
+.aiinv-steps{margin:0 0 16px;padding-left:22px;text-align:left;color:var(--muted);font-size:calc(13px * var(--ts));line-height:1.6}
+.aiinv-go{display:block;width:100%;border:0;border-radius:14px;padding:14px;font:700 calc(17px * var(--ts)) var(--display);color:var(--sheet);background:var(--signal);animation:aiinvGlow 1.6s ease-in-out .9s 2}
+.aiinv-go:focus{outline:none}
+.aiinv-go:focus-visible{box-shadow:0 0 0 4px var(--signal-wash)}
+.aiinv-row{display:flex;justify-content:space-between;gap:8px;margin-top:6px}
+.aiinv-later,.aiinv-never{border:0;background:none;padding:12px 6px;color:var(--muted);font:600 calc(14px * var(--ts)) var(--sans, inherit)}
+.aiinv-later{color:var(--ink-2)}
+.aiinv-nudge{animation:aiinvGlow 1.2s ease-in-out 2}
+@keyframes aiinvFade{from{opacity:0}to{opacity:1}}
+@keyframes aiinvFadeOut{from{opacity:1}to{opacity:0}}
+@keyframes aiinvUp{from{opacity:0;transform:translateY(40px) scale(.94)}to{opacity:1;transform:none}}
+@keyframes aiinvDown{to{opacity:0;transform:translateY(24px) scale(.97)}}
+@keyframes aiinvPerk{from{opacity:0;transform:translateX(-12px)}to{opacity:1;transform:none}}
+@keyframes aiinvTwinkle{0%,100%{transform:scale(1) rotate(0)}50%{transform:scale(1.12) rotate(12deg)}}
+@keyframes aiinvGlow{0%,100%{box-shadow:0 0 0 0 transparent}50%{box-shadow:0 0 0 6px var(--signal-wash)}}
+@media (prefers-reduced-motion:reduce){
+  #aiinv,#aiinv.out,.aiinv-card,#aiinv.out .aiinv-card,.aiinv-perks li,.aiinv-spark,.aiinv-go,.aiinv-nudge{animation:none}
+  #aiinv.out{opacity:0;transition:opacity .2s}
+}
+/* Safe start-up (app-blueprints · safe-startup): the placeholder until Scriptable hands over the data, and the start-up log */
+body:not(.booted) .view,body:not(.booted) #verLine{display:none}
+.booting{display:flex;align-items:center;justify-content:center;gap:10px;padding:80px 20px;color:var(--muted);font-size:calc(14px * var(--ts))}
+.booting.note{flex-direction:column;text-align:center;color:var(--ink-2);padding:60px 24px}
+.booting.note b{font-size:calc(18px * var(--ts));color:var(--ink)}
+.booting.note pre,.startlog{max-width:100%;overflow:auto;text-align:left;font:12px/1.45 ui-monospace,Menlo,monospace;background:var(--sheet);border:1px solid var(--rule);border-radius:10px;padding:10px;color:var(--ink-2);white-space:pre-wrap;-webkit-user-select:text;user-select:text}
+.startlog{margin:8px 0;max-height:260px}
+.busy-dot{width:15px;height:15px;flex:none;border-radius:50%;border:2px solid var(--rule);border-top-color:var(--signal);animation:bdspin .8s linear infinite}
+@keyframes bdspin{to{transform:rotate(360deg)}}
 </style>
 </head>
 <body class="d-${look.density}">
@@ -1643,6 +1843,7 @@ body.sess #liveOn{min-height:calc(100vh + 200px)}
   </header>
 
   <div id="error" class="error hidden"></div>
+  <div class="booting" role="status"><span class="busy-dot"></span>Loading your presets…</div>
 
   <div id="view-setup" class="view" role="tabpanel" aria-labelledby="tab-setup">
   <details class="settings" id="settingsBox" open>
@@ -1929,7 +2130,6 @@ window.addEventListener("error", function (e) {
   b.classList.remove("hidden");
 });
 </script>
-<script>window.BOOT = ${JSON.stringify(boot).replace(/</g, "\\u003c")};</script>
 <script>${PAGE_JS}</script>
 </body>
 </html>`;
@@ -1947,7 +2147,8 @@ const PAGE_JS = String.raw`
   sp.addEventListener("click", gone);   // tap to skip
   setTimeout(gone, 2900);               // out of the page once the CSS fade is done
 })();
-(function (BOOT) {
+// The app itself: window.__boot runs it with the data Scriptable hands over.
+function clientApp(BOOT) {
   "use strict";
   const $ = (id) => document.getElementById(id);
   const el = (tag, cls, text) => {
@@ -2243,6 +2444,61 @@ const PAGE_JS = String.raw`
     renderCloud();
   };
 
+  // ── AI invitation (app-blueprints · ai-invitation) ── ES5, no backticks: this sits inside the page's template string.
+  window.__aiInvite = function (c) {
+    var tries = 0;
+    (function wait() {
+      // Never over the launch screen, another sheet, or a task the app says can't be interrupted.
+      var busy = document.querySelector("#splash:not(.gone)") || document.getElementById("upd") || document.getElementById("aiinv") ||
+        document.querySelector(".sheet.open, #cfgsheet.open, #aisheet.open, #modal:not(.hidden), #editor:not(.hidden)") || (window.canInvite && !window.canInvite());
+      if (busy) { if (++tries < 40) setTimeout(wait, 500); return; }   // gives up after 20 s; it comes back another day
+      setTimeout(function () { if (!document.getElementById("aiinv")) showInvite(c); }, 600);
+    })();
+  };
+  // Never during a capture session: not while it starts, records, pauses or is being saved.
+  window.canInvite = function () { return !S.running && !starting; };
+  function escI(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (ch) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]; }); }
+  function showInvite(c) {
+    var el = document.createElement("div");
+    el.id = "aiinv";
+    el.setAttribute("role", "dialog"); el.setAttribute("aria-modal", "true"); el.setAttribute("aria-labelledby", "aiinv-t");
+    el.innerHTML = '<div class="aiinv-card">' +
+      '<div class="aiinv-spark" aria-hidden="true">✦</div>' +
+      '<h2 id="aiinv-t">' + escI(c.title) + '</h2>' +
+      '<p class="aiinv-lead">Add an AI key and these switch on:</p>' +
+      '<ul class="aiinv-perks">' + c.perks.slice(0, 3).map(function (p, i) {
+        return '<li style="--i:' + i + '"><span class="aiinv-ico" aria-hidden="true">' + escI(p.icon) + '</span>' + escI(p.text) + '</li>';
+      }).join("") + '</ul>' +
+      '<ol class="aiinv-steps"><li>Get a key from Claude or OpenAI</li><li>Paste it in AI settings</li><li>That’s it: these turn on at once</li></ol>' +
+      '<button class="aiinv-go" data-inv="open">Turn on AI</button>' +
+      '<div class="aiinv-row"><button class="aiinv-later" data-inv="later">Later</button>' +
+      '<button class="aiinv-never" data-inv="never">Don’t remind me again</button></div></div>';
+    el.addEventListener("click", function (e) {
+      var b = e.target.closest ? e.target.closest("[data-inv]") : null;
+      if (!b && e.target !== el) return;      // taps inside the card do nothing
+      closeInvite(b ? b.dataset.inv : "later");   // a tap on the dimmed backdrop counts as Later
+    });
+    document.body.appendChild(el);
+    nativeCall("aiinvite", { v: "shown" }, 10000).catch(function () {});
+    var go = el.querySelector(".aiinv-go"); if (go && go.focus) go.focus();
+  }
+  function closeInvite(what) {
+    var el = document.getElementById("aiinv"); if (!el || el.classList.contains("out")) return;
+    el.classList.add("out");
+    setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, 260);
+    nativeCall("aiinvite", { v: what }, 10000).catch(function () {});
+    if (what === "open") setTimeout(function () {
+      // VisionX's AI sheet asks Scriptable for its state as it opens and redraws when it arrives: nudge after that redraw.
+      var was = window.__aiChanged;
+      window.__aiChanged = function (s) {
+        window.__aiChanged = was; if (was) was(s);
+        var add = document.querySelector('#aisheet [data-aiact="aikey"]');   // the provider in use comes first
+        if (add) { add.classList.add("aiinv-nudge"); if (add.scrollIntoView) add.scrollIntoView({ block: "center" }); setTimeout(function () { add.classList.remove("aiinv-nudge"); }, 2600); }
+      };
+      window.__aiOpen();   // the same thing the Settings row's "ai-open" action does
+    }, 280);
+  }
+
   // ── Settings (app-blueprints · settings): every change applies at once and is saved; Done closes ──
   const LOOK = Object.assign({ theme: "auto", density: "comfortable", font: "sans", textSize: 1 }, BOOT.look || {});
   let SET = null, cfgIsOpen = false, cfgArmed = false;
@@ -2315,6 +2571,8 @@ const PAGE_JS = String.raw`
       '<div class="srow"><div class="grow"><b>Offer new versions</b><small>You have VisionX ' + hx(SET.version) + ". \u201CLater\u201D waits two days.</small></div>" +
         '<button class="switch ' + (s.checkUpdates ? "on" : "") + '" data-act="toggle" data-v="checkUpdates" aria-label="Offer new versions"></button></div>' +
       '<div class="srow"><div class="grow"><b>Check for updates now</b><small id="updmsg" class="muted" aria-live="polite"></small></div><button class="sm" data-act="updcheck">Check</button></div>' +
+      '<div class="srow"><div class="grow"><b>Start-up log</b><small class="muted">What happened the last times VisionX opened</small></div><button class="sm" data-act="startlog">Show</button></div>' +
+      '<pre id="startlog" class="startlog" hidden></pre>' +
       SET.cfgSchema.map((sec) => '<h3 class="sec">' + hx(sec.title) + "</h3>" + sec.items.map(fieldHTML).join("")).join("") +
       '<div class="cfg-foot"><span class="note">' + (changed ? changed + " setting" + (changed === 1 ? "" : "s") + " changed" : "All settings are at their original values") + "</span>" +
         (changed ? '<button class="sm danger ' + (cfgArmed ? "armed" : "") + '" data-act="cfgall">' + (cfgArmed ? "Confirm reset" : "Reset all") + "</button>" : "") + "</div>" +
@@ -2347,6 +2605,11 @@ const PAGE_JS = String.raw`
     }
     if (act === "ai-open") return window.__aiOpen();
     if (act === "openurl") return nativeCall("openurl", { v: v }, 30000).catch(() => {});
+    if (act === "startlog") {   // Settings › Updates › Start-up log (safe-startup recipe)
+      const pre = document.getElementById("startlog");
+      if (!pre.hidden) { pre.hidden = true; t.textContent = "Show"; return; }
+      return nativeCall("startlog", {}, 30000).then((txt) => { pre.textContent = txt || "Nothing logged yet."; pre.hidden = false; t.textContent = "Hide"; }, (er) => (window.__aiToast || alert)(er.message));
+    }
     if (act === "updcheck") {
       const um = document.getElementById("updmsg"); t.disabled = true; if (um) um.textContent = "Checking\u2026";
       return nativeCall("update-check", {}, 30000).then((r) => {
@@ -5069,17 +5332,48 @@ const PAGE_JS = String.raw`
     const m = Math.floor(s / 60);
     return m + ":" + String(s % 60).padStart(2, "0");
   }
-})(window.BOOT);
+}
+// The page goes on screen first; Scriptable hands over the data once it has read it (safe-startup recipe).
+window.__parts = [];
+window.__bootNote = function (title, detail) {
+  var b = document.querySelector(".booting"); if (!b) return;
+  b.className = "booting note";
+  b.innerHTML = "<b></b><span></span>" + (detail ? "<pre></pre>" : "");
+  b.querySelector("b").textContent = title;
+  b.querySelector("span").textContent = "Close VisionX and open it again. If it keeps happening, run the installer once more.";
+  if (detail) b.querySelector("pre").textContent = detail;
+};
+setTimeout(function () { if (!window.__booted) window.__bootNote("Still loading…"); }, 25000);
+document.addEventListener("visibilitychange", function () {   // coming back into view: redraw
+  if (document.visibilityState !== "visible") return;
+  var d = document.documentElement; d.style.transform = "translateZ(0)"; void d.offsetHeight; d.style.transform = "";
+});
+window.__boot = function (st) {
+  if (window.__booted) return;
+  if (!st.sessions || !st.sessions.length) st.sessions = [].concat.apply([], window.__parts);
+  window.__parts = [];
+  window.__booted = true; window.__INIT = st;
+  requestAnimationFrame(function () {   // make WebKit draw again once the data is in (helps if the window came up blank)
+    var d = document.documentElement; d.style.transform = "translateZ(0)"; void d.offsetHeight;
+    requestAnimationFrame(function () { d.style.transform = ""; });
+  });
+  clientApp(st);
+  // VisionX's views are in the markup, not drawn by a first render: show them and drop the placeholder.
+  document.body.classList.add("booted");
+  var b = document.querySelector(".booting"); if (b) b.parentNode.removeChild(b);
+};
 `;
 
-await loadSettings();   // before every branch: app and widget runs both use the saved choices
+// Settings are loaded here, before every branch (app and widget runs both use the saved choices); data is read in each branch.
+await loadSettings();
 if (config.runsInWidget || config.runsInAccessoryWidget) {
+  await loadData();
   await runWidget();             // never builds or presents a WebView, Alert or QuickLook (app-blueprints · widgets)
 } else {
-  widgetIcon();                  // caches the logo tile for the widget, in the background
   try {
-    await main();
+    await main();                // the widget's logo tile is cached 6 s after the first screen (bootApp)
   } catch (e) {
+    startLog("start-up failed: " + ((e && e.message) || e));
     const a = new Alert();
     a.title = "Vision Session failed to start";
     a.message = String((e && e.message) || e);
