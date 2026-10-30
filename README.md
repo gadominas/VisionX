@@ -13,6 +13,7 @@ Your iPhone as an AI smart camera: it takes a photo every few seconds, has Claud
 [![AI](https://img.shields.io/badge/AI-Claude%20%7C%20OpenAI%20%7C%20Apple-171B22?style=flat-square&labelColor=0E1116)](#ai)
 [![Blueprints](https://img.shields.io/badge/built%20with-app--blueprints-171B22?style=flat-square&labelColor=0E1116)](docs/BLUEPRINTS.md)
 [![Last commit](https://img.shields.io/github/last-commit/gadominas/VisionX?style=flat-square&labelColor=0E1116&color=171B22&label=updated)](https://github.com/gadominas/VisionX/commits)
+[![License](https://img.shields.io/badge/license-MIT-171B22?style=flat-square&labelColor=0E1116)](LICENSE)
 
 </div>
 
@@ -34,7 +35,7 @@ Your iPhone as an AI smart camera: it takes a photo every few seconds, has Claud
 - **Triggers run your shortcuts.** A trigger has a plain-language condition, such as "A car with plate KXA 482 is at the gate", and a shortcut to run. When the model says the condition is met, the shortcut runs and receives the capture summary or your own message, so it can open a gate, send a notification or switch on a light.
 - **Two summary modes.** Each photo can build on one running summary for the whole session, for counting and tallies, or be judged fresh on its own, for catching a moment (see [Modes](#modes)).
 - **Live tab.** Starting a session opens Live and hides the tabs and status line until it stops. The live camera, the photo being analyzed and the last analyzed photo sit in one row that stays pinned as you scroll and shrinks to half its height.
-- **Markdown summaries.** Summaries render Markdown from the model: headings, lists, tables, code blocks, donut, bar and line charts, and gauges (`<meter>`, `<progress>`). **✨ Make it visual** rewrites your instructions to ask for them.
+- **Markdown summaries.** Summaries render Markdown from the model: headings, lists, tables, code blocks, donut, bar and line charts, headline-number tiles, and gauges (`<meter>`, `<progress>`). **✨ Make it visual** rewrites your instructions to ask for them.
 - **Refine with AI.** Expand the instructions into a full-screen editor. **Refine with AI** rewrites them so the model knows exactly what to look for, count and ignore. Pick Clearer, More specific or Shorter, or say what should change, then use the suggestion or keep your own.
 - **Your instructions, as presets.** It does whatever you describe, such as "Count the different people and summarize them". Save instructions you like as presets, and choose Claude, OpenAI or Apple Intelligence to analyze the photos.
 - **Saved sessions.** Ending a session saves it on this iPhone with its summary, stats, trigger results, last photos and debug log, and opens its report in the Sessions tab.
@@ -312,4 +313,4 @@ A personal project, provided as is, without warranty. Not affiliated with Apple,
 
 ## License
 
-No license has been chosen yet, so default copyright applies: ask before reusing the code.
+[MIT](LICENSE) © 2026 Gediminas Siutilas. Issues and pull requests are welcome: keep everything in a single Scriptable file, with no build step, and test on a real device. To release, follow [docs/RELEASING.md](docs/RELEASING.md).
