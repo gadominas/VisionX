@@ -50,7 +50,7 @@ const BLUEPRINTS = [
   { id: 'ai-configuration', name: 'AI configuration', version: '1.0.0', since: '1.8.0' },
   { id: 'launch-screen', name: 'Launch screen', version: '1.0.0', since: '1.17.1' },
   { id: 'widgets', name: 'Widgets', version: '1.0.0', since: '1.19.0' },
-  { id: 'ai-invitation', name: 'AI invitation', version: '1.2.0', since: '1.20.0' },
+  { id: 'ai-invitation', name: 'AI invitation', version: '1.2.1', since: '1.20.0' },
 ];
 
 // ───────── AI invitation (app-blueprints · ai-invitation) ─────────
@@ -79,18 +79,45 @@ function startLog(msg) {
     lfm.writeString(LOG_PATH, old.concat(line).join("\n"));
   } catch (e) {}
 }
-const loadIssues = [];   // files iCloud didn't hand over in time
+const loadIssues = [];    // files that didn't arrive (iCloud too slow, or unreadable): never written this run
+const loadRepaired = [];  // files that arrived damaged: kept aside as <name>.broken-<time>.json, then started fresh
 async function load(n, def, waitMs = 10000) {
   const p = SP(n);
   if (!sfm.fileExists(p)) return def;
+  let txt;
   try {
     if (sfm.isFileStoredIniCloud(p) && !sfm.isFileDownloaded(p)) {
       // iCloud can take a long time (or forever, offline): never let start-up hang on it
       await Promise.race([sfm.downloadFileFromiCloud(p), new Promise(r => Timer.schedule(waitMs, false, r))]);
       if (!sfm.isFileDownloaded(p)) { loadIssues.push(n); startLog(`iCloud didn't deliver ${n}.json in ${waitMs / 1000} s`); return def; }
     }
-    return JSON.parse(sfm.readString(p));
-  } catch (e) { loadIssues.push(n); startLog(`Couldn't read ${n}.json: ${e}`); return def; }   // a broken file falls back to defaults, never crashes
+    txt = sfm.readString(p);
+  } catch (e) { loadIssues.push(n); startLog(`Couldn't read ${n}.json: ${e}`); return def; }   // not read: never saved over
+  try { return JSON.parse(txt); }
+  catch (e) { keepBroken(sfm, p, n, txt); return def; }
+}
+// It arrived but is damaged: keep a copy next to it, then start this file fresh so saving can carry on (1.1.0).
+// Without this, one damaged file stopped the app from ever saving again. The widget reads the data on every refresh
+// and never saves, so a copy that's already there is not made again. The parse error isn't logged: it can quote the file.
+function keepBroken(fm, p, n, txt) {
+  try {
+    const base = p.replace(/\.json$/, ""), dir = p.slice(0, p.lastIndexOf("/")), pre = base.slice(dir.length + 1) + ".broken-";
+    let kept = false;
+    try { kept = fm.listContents(dir).some(f => f.startsWith(pre) && fm.readString(fm.joinPath(dir, f)) === txt); } catch (_) {}
+    if (!kept) fm.writeString(base + ".broken-" + Date.now() + ".json", txt);
+    if (!loadRepaired.includes(n)) loadRepaired.push(n);
+    startLog(`${n}.json was damaged (not valid JSON); ${kept ? "a copy was already kept" : "kept a copy"} and started it fresh`);
+  } catch (e) { loadIssues.push(n); startLog(`${n}.json was damaged and couldn't be copied aside`); }   // no copy, no overwrite
+}
+// The same rules for VisionX's data files on this iPhone (no iCloud wait), read in loadData(): presets (readStore()) and
+// token usage (aiLoad's visionx-usage.json). Their writes are guarded in writeStore() and aiWrite("usage").
+function loadLocal(fm, p, n, def) {
+  if (!fm.fileExists(p)) return def;
+  let txt;
+  try { txt = fm.readString(p); if (typeof txt !== "string") throw new Error("no text"); }
+  catch (e) { loadIssues.push(n); startLog(`Couldn't read ${n}.json: ${e}`); return def; }   // not read: never saved over
+  try { return JSON.parse(txt); }
+  catch (e) { keepBroken(fm, p, n, txt); return def; }
 }
 // Settings that were never read are never saved over (set by loadSettings). VisionX's data files live on this
 // iPhone (vision-session.json, the sessions folder, visionx-usage.json); writeStore() and aiWrite() guard them.
@@ -136,10 +163,10 @@ async function loadSettings() {
 let store = null;        // vision-session.json: presets, triggers and the session picks (this iPhone)
 let sessions = [];       // saved sessions, newest first (index entries only)
 async function loadData() {
-  loadIssues.length = 0;
+  loadIssues.length = 0;   // loadRepaired is kept, so a damaged settings.json (read before this) still gets its toast
   store = readStore();
   sessions = sesIndex();             // read only: the app tidies the list in bootApp, the widget never deletes
-  usage = aiLoad("usage", usage);
+  usage = loadLocal(aiFm, aiPath("usage"), "visionx-usage", usage);   // aiLoad's file, with the recipe's damaged-file rules
   dataLoaded = loadIssues.length === 0;   // anything missing: show what we have, save nothing over it
 }
 // Everything tunable lives here; the Settings screen edits these (stored in settings.cfg, defaults below).
@@ -590,11 +617,10 @@ function storePath() {
   const fm = FileManager.local();
   return fm.joinPath(fm.documentsDirectory(), STORE_FILE);
 }
+// Read in loadData() only: unreadable → listed in loadIssues (writeStore() then saves nothing over it);
+// damaged → copied aside as vision-session.broken-<time>.json and started fresh (safe-startup 1.1.0).
 function readStore() {
-  const fm = FileManager.local();
-  const path = storePath();
-  if (!fm.fileExists(path)) return null;
-  try { return JSON.parse(fm.readString(path)); } catch (_) { return null; }
+  return loadLocal(FileManager.local(), storePath(), "vision-session", null);
 }
 function writeStore(data) {
   if (!dataLoaded) return;   // never save presets over a file that was never read
@@ -1087,6 +1113,7 @@ async function bootApp(isClosed) {
   try { seen = await ev(`document.visibilityState + ", " + innerWidth + "x" + innerHeight`, 5000); } catch (e) { seen = String(e.message || e); }
   startLog(`screen ready in ${((Date.now() - t0) / 1000).toFixed(1)} s (page: ${seen})`);
   if (loadIssues.length) ev(`window.__aiToast(${safeJSON("Some of your data is still coming from iCloud. Nothing will be saved until you reopen VisionX.")}); 'ok'`).catch(() => {});
+  else if (loadRepaired.length) ev(`window.__aiToast(${safeJSON("Some of your data couldn't be read, so VisionX kept a copy and started it fresh.")}); 'ok'`).catch(() => {});
   // Deferred work, once the first screen is drawn (VisionX has no refresh of its own): updates, then the widget's icon.
   Timer.schedule(3500, false, () => {
     if (isClosed()) return;
@@ -2492,7 +2519,8 @@ function clientApp(BOOT) {
       var was = window.__aiChanged;
       window.__aiChanged = function (s) {
         window.__aiChanged = was; if (was) was(s);
-        var add = document.querySelector('#aisheet [data-aiact="aikey"]');   // the provider in use comes first
+        // The Add key of the provider in use: its card is the one marked .active (never "the first button").
+        var add = document.querySelector('#aisheet .aicard.active [data-aiact="aikey"]') || document.querySelector('#aisheet [data-aiact="aikey"]');
         if (add) { add.classList.add("aiinv-nudge"); if (add.scrollIntoView) add.scrollIntoView({ block: "center" }); setTimeout(function () { add.classList.remove("aiinv-nudge"); }, 2600); }
       };
       window.__aiOpen();   // the same thing the Settings row's "ai-open" action does
