@@ -33,12 +33,21 @@ const STORE_FILE = "vision-session.json"; // presets + settings, in Scriptable's
 // ───────── Version and in-app updates ─────────
 // This build's version. When releasing, bump it and add a matching entry to releases.json.
 // Keep these two lines exactly in this form (single quotes): the updater reads them from downloads.
-const VERSION = '1.21.0';
+const VERSION = '1.22.0';
 const APP_ID = 'visionx';   // unique per app, never changes
 const REPO_RAW = 'https://raw.githubusercontent.com/gadominas/VisionX/main/';
 const SCRIPT_FILE = 'VisionX.js';   // the script's file name in the repository
 const UPDATE_SNOOZE_MS = 2 * 24 * 3600 * 1000;   // "Later" = 2 days
 const KC_UPDATE_SNOOZE = 'visionx-update-snooze';   // Keychain key, unique per app
+
+// ── Anonymous usage counts (opt-in), sent to PostHog (app-blueprints · usage-analytics) ──
+// Nothing is sent until KEY is filled in AND the person agrees. Each event carries a random install ID
+// (made on this iPhone, not linked to any account), the app version and counts: never names, IDs from
+// other services, text, photos or anything the app read. Events are anonymous (no person profiles).
+// The key is PostHog's project key, made to sit in public apps: it can only add events.
+// HOST must be the region the project lives in: PostHog's other region answers "accepted" and then drops the events.
+const USAGE = { HOST: 'https://us.i.posthog.com', KEY: 'phc_yAi2PxJCRioWEKLF3uockdCf3QvyQdNABivwqpE4NCWR' };   // the shared project
+const KC_INSTALL = 'visionx-install-id';
 
 // ───────── Blueprints ─────────
 // Shared blueprints this app was built with (github.com/gadominas/app-blueprints). One line per blueprint, in this exact shape:
@@ -51,6 +60,7 @@ const BLUEPRINTS = [
   { id: 'launch-screen', name: 'Launch screen', version: '1.0.0', since: '1.17.1' },
   { id: 'widgets', name: 'Widgets', version: '1.0.0', since: '1.19.0' },
   { id: 'ai-invitation', name: 'AI invitation', version: '1.2.1', since: '1.20.0' },
+  { id: 'usage-analytics', name: 'Anonymous usage analytics', version: '1.1.0', since: '1.22.0' },
 ];
 
 // ───────── AI invitation (app-blueprints · ai-invitation) ─────────
@@ -132,14 +142,65 @@ const write = (n, v) => {
 const settings = {
   theme: "auto", density: "comfortable", font: "sans", textSize: 1,
   checkUpdates: true,   // offer new versions from GitHub (asks again 2 days after "Later")
+  shareUsage: false, usageAsked: false,  // anonymous usage counts: off until the person agrees
   cfg: {},
 };
 const saveSettings = () => write("settings", settings);
+let usageQueue = [], usageTimer = null;
+const usageAvailable = () => !!USAGE.KEY;
+const usageOn = () => usageAvailable() && !!settings.shareUsage;
+function installId() {
+  if (Keychain.contains(KC_INSTALL)) return Keychain.get(KC_INSTALL);
+  const id = UUID.string().toLowerCase();
+  Keychain.set(KC_INSTALL, id);
+  return id;
+}
+function track(event, props = {}) {
+  if (!usageOn()) return;
+  try {
+    usageQueue.push({ event, timestamp: new Date().toISOString(),
+      properties: Object.assign({ distinct_id: installId(), $process_person_profile: false, app: APP_ID, app_version: VERSION, $lib: APP_ID }, props) });
+    if (usageQueue.length >= 25) flushUsage();
+    else if (!usageTimer) usageTimer = Timer.schedule(3000, false, () => { usageTimer = null; flushUsage(); });
+  } catch (e) {}
+}
+let usageLast = null;   // { at, events, ok, status, host, error }: shown in Settings › Privacy
+async function postUsage(host, batch) {
+  const r = new Request(host + '/batch/');
+  r.method = 'POST'; r.timeoutInterval = 10; r.headers = { 'Content-Type': 'application/json' };
+  r.body = JSON.stringify({ api_key: USAGE.KEY, batch });
+  let body = '';
+  try { body = await r.loadString(); } catch (e) { return { ok: false, status: 0, host, error: String(e.message || e) }; }
+  const status = (r.response && r.response.statusCode) || 0;
+  return { ok: status >= 200 && status < 300, status, host, error: status >= 200 && status < 300 ? '' : String(body || '').slice(0, 200) };
+}
+// Sends what's queued in one request. Never slows the app; if it fails, those counts are gone (and the log says why).
+async function flushUsage() {
+  if (!usageQueue.length) return usageLast;
+  if (!usageOn()) { usageQueue = []; return usageLast; }
+  const batch = usageQueue.splice(0, usageQueue.length);
+  const res = await postUsage(USAGE.HOST, batch);
+  usageLast = Object.assign({ at: Date.now(), events: batch.length }, res);
+  try { startLog(`usage: ${batch.length} event${batch.length === 1 ? '' : 's'} → ${res.ok ? 'sent to ' + res.host.replace('https://', '') : 'not sent: ' + (res.status ? 'HTTP ' + res.status + ' ' : '') + res.error}`); } catch (e) {}
+  return usageLast;
+}
+function usageStatus() {
+  const u = usageLast;
+  if (!u) return '';
+  const t = new Date(u.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  return u.ok ? `Last sent ${t}: ${u.events} event${u.events === 1 ? '' : 's'}, accepted (${u.host.replace('https://', '')})`
+              : `Last try ${t} failed: ${u.status ? 'HTTP ' + u.status + ' ' : ''}${u.error}`;
+}
+function setUsage(on) {
+  settings.shareUsage = !!on; settings.usageAsked = true; saveSettings();
+  if (on) track('usage_opt_in');
+  else { usageQueue = []; if (Keychain.contains(KC_INSTALL)) Keychain.remove(KC_INSTALL); }   // a fresh ID if switched on again
+}
 // Every key the page may change, with its check (all apply at once on the page).
 const SET_KEYS = {
   theme: (v) => v === "auto" || !!PALETTES[v], density: (v) => ["comfortable", "compact", "tiny"].includes(v),
   font: (v) => ["sans", "serif"].includes(v), textSize: (v) => [0.92, 1, 1.12, 1.25].includes(+v),
-  checkUpdates: "bool",
+  checkUpdates: "bool", shareUsage: "bool",
 };
 function setSetting(k, v) {
   const s = SET_KEYS[k];
@@ -532,6 +593,7 @@ function settingsState() {
     palettes: PALETTES, version: VERSION, appName: "VisionX",
     blueprints: BLUEPRINTS, blueprintsRepo: BLUEPRINTS_REPO,
     hasKey: !!aiKey(), aiStatus: aiStatusLine(),
+    usageAvailable: usageAvailable(), usageStatus: usageStatus(),
   };
 }
 
@@ -943,7 +1005,20 @@ async function handleBridgeCall(wv, ctx, id) {
     }
     else if (msg.type === "apple") result = await runAppleShortcut(msg.payload);
     else if (msg.type === "appleText") result = (await runShortcutText(msg.payload.shortcut, msg.payload.text)).text;
-    else if (msg.type === "runShortcut") result = await runShortcutText(msg.payload.shortcut, msg.payload.text);
+    else if (msg.type === "runShortcut") { result = await runShortcutText(msg.payload.shortcut, msg.payload.text); track("trigger_fired"); }
+    else if (msg.type === "usage-consent") { setUsage((msg.payload || {}).on === "1"); flushUsage(); result = true; }
+    else if (msg.type === "usage-test") {
+      let ok = false, m = "";
+      if (!usageOn()) m = "Turn on Share anonymous usage first.";
+      else { track("usage_test"); const r = await flushUsage(); ok = !!(r && r.ok); m = usageStatus() || "Nothing was sent."; }
+      result = { ok, msg: m };
+    }
+    else if (msg.type === "usage-event") {   // what happens on the page: only these events, with numbers kept small
+      const q = msg.payload || {}, n = (v) => Math.max(0, Math.min(9999, parseInt(v, 10) || 0));
+      if (q.e === "session_started") track("session_started", { engine: q.engine === "apple" ? "apple" : "cloud" });
+      else if (q.e === "session_finished") track("session_finished", { photos: n(q.photos), analysed: n(q.analysed), triggers: n(q.triggers) });
+      result = true;
+    }
     else if (msg.type === "save") { writeStore(msg.payload); result = true; }
     // Settings (app-blueprints · settings): each change is applied and saved at once; the answer is the fresh state.
     else if (msg.type === "settings-get") result = settingsState();
@@ -959,7 +1034,8 @@ async function handleBridgeCall(wv, ctx, id) {
     }
     else if (msg.type === "set") {
       const q = msg.payload || {};
-      if (!setSetting(q.k, q.v)) throw new Error("That setting can\u2019t be changed here.");
+      if (q.k === "shareUsage") setUsage(q.v === true || q.v === "true" || q.v === "1");   // off also deletes the install ID
+      else if (!setSetting(q.k, q.v)) throw new Error("That setting can\u2019t be changed here.");
       saveSettings(); result = settingsState();
     }
     else if (msg.type === "cfg") {
@@ -985,11 +1061,12 @@ async function handleBridgeCall(wv, ctx, id) {
       result = txt;
     }
     else if (msg.type === "aiinvite") { aiInviteNote((msg.payload || {}).v); result = true; }   // AI invitation: shown, open, later or never
-    else if (msg.type === "copy") { Pasteboard.copy(String(msg.payload.text || "")); result = true; }
+    else if (msg.type === "copy") { Pasteboard.copy(String(msg.payload.text || "")); result = true; track("result_copied"); }
     else if (msg.type === "updateLater") { snoozeUpdate(); ctx.update = null; result = true; }
     else if (msg.type === "updateNow") {
       if (!ctx.update) throw new Error("No update is waiting. Close and reopen VisionX to check again.");
       result = await applyUpdate(ctx.update);
+      track("app_updated", { from: VERSION, to: (String(result).match(/[0-9]+\.[0-9]+\.[0-9]+/) || [""])[0] }); flushUsage();
       ctx.update = null;
       clearUpdateSnooze();
     }
@@ -1060,6 +1137,7 @@ function clientState() {
     look: lookState(),
     cfg: Object.fromEntries(CFG_FLAT.map((d) => [d.k, cfg(d.k)])),
     sessions,
+    usageAsk: usageAvailable() && !settings.usageAsked && !settings.shareUsage,
   };
 }
 const safeJSON = (v) => JSON.stringify(v).replace(/</g, "\\u003c").replace(/\u2028/g, "\\u2028").replace(/\u2029/g, "\\u2029");
@@ -1112,6 +1190,7 @@ async function bootApp(isClosed) {
   let seen = "";
   try { seen = await ev(`document.visibilityState + ", " + innerWidth + "x" + innerHeight`, 5000); } catch (e) { seen = String(e.message || e); }
   startLog(`screen ready in ${((Date.now() - t0) / 1000).toFixed(1)} s (page: ${seen})`);
+  track("app_open", { layout: settings.density, theme: settings.theme, ai_key: !!aiKey(), engine: (store && store.settings && store.settings.engine) === "apple" ? "apple" : "cloud" });
   if (loadIssues.length) ev(`window.__aiToast(${safeJSON("Some of your data is still coming from iCloud. Nothing will be saved until you reopen VisionX.")}); 'ok'`).catch(() => {});
   else if (loadRepaired.length) ev(`window.__aiToast(${safeJSON("Some of your data couldn't be read, so VisionX kept a copy and started it fresh.")}); 'ok'`).catch(() => {});
   // Deferred work, once the first screen is drawn (VisionX has no refresh of its own): updates, then the widget's icon.
@@ -1138,7 +1217,7 @@ async function main() {
   // An https base URL gives the page a secure origin, which the camera API requires.
   await Promise.race([wv.loadHTML(buildHTML(), "https://localhost/"), pause(15000)]);   // the launch screen, drawn on screen
   let closed = false;
-  presented.then(() => { closed = true; releaseLock(); });
+  presented.then(() => { closed = true; releaseLock(); flushUsage(); });
   bootApp(() => closed).catch(e => {         // runs beside the window: closing it never waits on this
     startLog("start-up failed: " + (e.message || e));
     let log = "";
@@ -1740,6 +1819,11 @@ body.sess #liveOn{min-height:calc(100vh + 200px)}
 .liveGrid.mini .liveTag,.liveGrid.mini .nowBadge{top:4px;left:4px;font-size:9px;padding:1px 5px}
 @media (prefers-reduced-motion:reduce){.liveGrid.sized .livePane .liveWrap,.liveGrid.sized .liveApple,.liveGrid.sized .nowPhoto,.liveGrid.sized .lastPhoto{transition:none}}
 /* Layers: modal 10, editor 20, update 30, Settings 50, AI settings 60 (it opens from Settings), toasts 70 */
+#usageask{background:var(--sheet);border:1px solid var(--rule);border-radius:16px;padding:14px 16px;margin:0 0 14px}
+#usageask b{font-size:calc(16px * var(--ts))}
+#usageask p{margin:6px 0 12px;color:var(--muted);font-size:calc(14px * var(--ts));line-height:1.4}
+.uabtns{display:flex;gap:10px}
+.uabtns button{flex:1;min-height:44px}
 #cfgsheet{position:fixed;inset:0;z-index:50;background:var(--paper);color:var(--ink);transform:translateY(102%);visibility:hidden;transition:transform .28s ease,visibility 0s linear .28s;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;text-align:left}
 #cfgsheet.open{transform:none;visibility:visible;transition:transform .28s ease}
 #cfgsheet button{font:inherit;color:inherit;background:none;border:0;border-radius:0;padding:0;font-weight:inherit;cursor:pointer;text-align:inherit}
@@ -1874,6 +1958,7 @@ body:not(.booted) .view,body:not(.booted) #verLine{display:none}
     </div>
     <div class="cdBar" id="cdBar" aria-hidden="true"><span id="cdFill"></span></div>
   </header>
+  <div id="usageslot"></div>
 
   <div id="error" class="error hidden"></div>
   <div class="booting" role="status"><span class="busy-dot"></span>Loading your presets…</div>
@@ -2615,6 +2700,9 @@ function clientApp(BOOT) {
       '<h3 class="sec">AI</h3>' +
       '<div class="srow"><div class="grow"><b>Keys, models and token usage</b><small id="s-aistatus">' + hx(cloud.hasKey ? cloud.name + " \u2014 " + cloud.model : "Add a Claude or OpenAI key for cloud analysis") + "</small>" +
         (S.running ? '<small class="muted">Available when the session ends</small>' : "") + '</div><button class="sm" data-act="ai-open"' + (S.running ? " disabled" : "") + ">AI settings</button></div>" +
+      (SET.usageAvailable ? '<h3 class="sec">Privacy</h3>' +
+        '<div class="srow"><div class="grow"><b>Share anonymous usage</b><small>Counts like app opens, sessions run and photos analysed, with a random install ID. Never your photos, instructions or AI answers. Off removes the ID.</small></div><button class="switch ' + (s.shareUsage ? "on" : "") + '" data-act="toggle" data-v="shareUsage" aria-label="Share anonymous usage"></button></div>' +
+        '<div class="srow"><div class="grow"><b>Test the connection</b><small id="usagemsg" class="muted" aria-live="polite">' + hx(SET.usageStatus || "Sends one test event now and shows PostHog\u2019s answer.") + '</small></div><button class="sm" data-act="usage-test">Send test</button></div>' : "") +
       '<h3 class="sec">Updates</h3>' +
       '<div class="srow"><div class="grow"><b>Offer new versions</b><small>You have VisionX ' + hx(SET.version) + ". \u201CLater\u201D waits two days.</small></div>" +
         '<button class="switch ' + (s.checkUpdates ? "on" : "") + '" data-act="toggle" data-v="checkUpdates" aria-label="Offer new versions"></button></div>' +
@@ -2659,6 +2747,10 @@ function clientApp(BOOT) {
       if (!pre.hidden) { pre.hidden = true; t.textContent = "Show"; return; }
       return nativeCall("startlog", {}, 30000).then((txt) => { pre.textContent = txt || "Nothing logged yet."; pre.hidden = false; t.textContent = "Hide"; }, (er) => (window.__aiToast || alert)(er.message));
     }
+    if (act === "usage-test") {
+      const um = document.getElementById("usagemsg"); t.disabled = true; if (um) um.textContent = "Sending\u2026";
+      return nativeCall("usage-test", {}, 30000).then((r) => { t.disabled = false; const m = document.getElementById("usagemsg"); if (m) m.textContent = (r && r.ok ? "\u2713 " : "\u2717 ") + ((r && r.msg) || ""); }, () => { t.disabled = false; });
+    }
     if (act === "updcheck") {
       const um = document.getElementById("updmsg"); t.disabled = true; if (um) um.textContent = "Checking\u2026";
       return nativeCall("update-check", {}, 30000).then((r) => {
@@ -2673,6 +2765,18 @@ function clientApp(BOOT) {
   }
   $("cfgOpen").addEventListener("click", openSettings);
   applyLook();
+  // Anonymous usage (app-blueprints · usage-analytics): the one-time question, under the header
+  (function () {
+    var I = window.__INIT || {}, slot = document.getElementById("usageslot");
+    if (!slot || !I.usageAsk) return;
+    slot.innerHTML = '<section id="usageask" aria-label="Anonymous usage"><b>Help improve VisionX?</b><p>Share anonymous counts, like app opens, sessions run and photos analysed. Never your photos, instructions or AI answers. You can change this in Settings.</p><div class="uabtns"><button type="button" class="chip primary" data-ua="1">Yes, share</button><button type="button" class="chip" data-ua="0">No thanks</button></div></section>';
+    slot.addEventListener("click", function (e) {
+      var b = e.target.closest("[data-ua]"); if (!b) return;
+      nativeCall("usage-consent", { on: b.dataset.ua }, 10000).catch(function () {});
+      slot.innerHTML = "";
+      (window.__aiToast || function () {})(b.dataset.ua === "1" ? "Thank you! Change it any time in Settings." : "No problem. Nothing is shared.");
+    });
+  })();
   $("toggle").addEventListener("click", () => (S.running ? endSession() : startSession()));
   wireTabs();
   wireControls();
@@ -2914,6 +3018,7 @@ function clientApp(BOOT) {
     }
     S.running = true;
     S.stats.start = Date.now();
+    nativeCall("usage-event", { e: "session_started", engine: isApple() ? "apple" : "cloud" }, 10000).catch(function () {});
     sendWidget(S);
     initTriggerState(S);
     renderTriggerStatus();
@@ -2949,6 +3054,7 @@ function clientApp(BOOT) {
     // Let an aborted in-flight request settle so the stats include it.
     await new Promise((r) => setTimeout(r, 150));
     renderAll();
+    nativeCall("usage-event", { e: "session_finished", photos: sess.stats.photos || 0, analysed: sess.stats.ok || 0, triggers: sess.stats.fired || 0 }, 10000).catch(function () {});
     await finishSession(sess);
   }
 

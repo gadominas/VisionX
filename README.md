@@ -253,6 +253,8 @@ VisionX checks this repository for a new version each time it opens. When one is
 
 ## Privacy and security
 
+- **Anonymous usage, only if you agree.** A one-time question (and **Settings › Privacy › Share anonymous usage**) decides whether VisionX sends anonymous counts to PostHog's US cloud: app opens, sessions started and finished (with how many photos were taken and analysed), trigger Shortcuts run and results copied, the app version and a few display settings (including Apple Intelligence or cloud). Each event carries a random install ID made on your phone, not linked to anything else. Never sent: photos, instructions, presets, AI answers, Shortcut names or anything a trigger sends. Turning it off stops sending and deletes the install ID.
+
 - During a session, photos are kept in memory: the last three on screen and the last ten in the debug log (both set in **Settings › Capture**).
 - When a session ends, it is saved with those photos in Scriptable's local Documents folder (`VisionX-sessions`) on this iPhone only, never iCloud or Photos. Only the last 3 sessions are kept (up to 10); older ones are deleted, and you can delete any session from its report.
 - Presets, triggers and session choices are saved in Scriptable's local Documents folder as `vision-session.json`. Appearance and tunables are in `settings.json` in iCloud Drive › Scriptable › VisionX.
