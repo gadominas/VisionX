@@ -2,6 +2,16 @@
 
 All notable changes to VisionX. Generated from `releases.json`; edit that file, not this one.
 
+## 1.19.1 (2026-10-30): Headline numbers as tiles
+
+- 🔢 **Number tiles work**: Ask for two to four headline numbers and the summary shows them as big tiles.
+- 👀 **Read at a glance**: Totals like cars, vans or people seen stand out at the start of the summary.
+- ✍️ **Just ask for it**: Write “show the totals as tiles” in your instructions, or tap ✨ Make it visual.
+
+**Fixes**
+
+- A "stats" block from the model showed as plain code instead of tiles, because the session stats strip's renderStats() replaced the tile renderer of the same name; the tile renderer is now renderStatTiles()
+
 ## 1.19.0 (2026-10-29): VisionX on your Home Screen
 
 - 🧩 **A real widget**: Add VisionX to your Home Screen: the live session, or your last one with its triggers and summary.

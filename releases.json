@@ -4,6 +4,32 @@
   "script": "VisionX.js",
   "releases": [
     {
+      "version": "1.19.1",
+      "date": "2026-10-30",
+      "title": "Headline numbers as tiles",
+      "highlights": [
+        {
+          "icon": "🔢",
+          "title": "Number tiles work",
+          "text": "Ask for two to four headline numbers and the summary shows them as big tiles."
+        },
+        {
+          "icon": "👀",
+          "title": "Read at a glance",
+          "text": "Totals like cars, vans or people seen stand out at the start of the summary."
+        },
+        {
+          "icon": "✍️",
+          "title": "Just ask for it",
+          "text": "Write “show the totals as tiles” in your instructions, or tap ✨ Make it visual."
+        }
+      ],
+      "changes": [],
+      "fixes": [
+        "A \"stats\" block from the model showed as plain code instead of tiles, because the session stats strip's renderStats() replaced the tile renderer of the same name; the tile renderer is now renderStatTiles()"
+      ]
+    },
+    {
       "version": "1.19.0",
       "date": "2026-10-29",
       "title": "VisionX on your Home Screen",
