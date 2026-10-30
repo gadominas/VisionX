@@ -25,18 +25,21 @@
         }
       ],
       "changes": [
-        "Safe start-up (app-blueprints · safe-startup 1.0.0): an empty window in the launch screen's colour first, then the page, then your presets, triggers and sessions handed over in pieces",
+        "Safe start-up (app-blueprints · safe-startup 1.1.0): an empty window in the launch screen's colour first, then the page, then your presets, triggers and sessions handed over in pieces",
         "Only one VisionX window at a time: a quick second tap on the widget waits up to 1.5 s for the first, then opens anyway",
         "The update check and the widget's logo tile start a few seconds after the first screen, so they never slow the start",
         "Settings › Updates › Start-up log: the last 40 lines of what happened when VisionX opened; a stalled start says so on screen",
-        "AI invitation (app-blueprints · ai-invitation 1.2.0): without a Claude or OpenAI key, at most every 3 days (weekly after four \"Later\"s), never on a launch that offers an update, never during a capture session, and \"Don't remind me again\" ends it",
+        "A damaged settings, presets or token-usage file is kept as <name>.broken-<time>.json next to it and started fresh, so saving carries on, and VisionX says so when it opens; files that didn't arrive are still never saved over",
+        "AI invitation (app-blueprints · ai-invitation 1.2.1): without a Claude or OpenAI key, at most every 3 days (weekly after four \"Later\"s), never on a launch that offers an update, never during a capture session, and \"Don't remind me again\" ends it",
         "No invitation while Apple Intelligence is in use (picked under Analyze with and already used in a saved session): AI already works for you",
         "Removing your last key brings the invitation back from the next launch",
         "Settings › Built with lists the AI invitation blueprint"
       ],
       "fixes": [
         "VisionX could open to a blank screen when opened from its widget, after quick taps, or while iCloud was slow, because settings and data were read and the page built before the window was on screen",
-        "Settings are never saved over when iCloud didn't hand them over in time, and presets and token usage are never saved before they were read"
+        "Settings are never saved over when iCloud didn't hand them over in time, and presets and token usage are never saved before they were read",
+        "A damaged settings.json stopped VisionX from ever saving settings again, and a damaged presets or token-usage file was silently replaced on the next save; both are now copied aside first",
+        "Turn on AI pulsed the first Add key in AI settings; it now pulses the one of the provider in use"
       ]
     },
     {
