@@ -1,0 +1,22 @@
+{
+  "description": "Sees. Understands. Acts. Your iPhone as an AI smart camera: Claude, OpenAI or Apple Intelligence looks at a photo every few seconds and runs Apple Shortcuts when something happens. A Scriptable app.",
+  "homepage": "https://github.com/gadominas/VisionX#readme",
+  "topics": [
+    "scriptable",
+    "scriptable-app",
+    "ios",
+    "iphone",
+    "javascript",
+    "app-blueprints",
+    "ai",
+    "claude",
+    "openai",
+    "apple-intelligence",
+    "computer-vision",
+    "smart-camera",
+    "apple-shortcuts",
+    "license-plate-recognition",
+    "object-counting",
+    "home-automation"
+  ]
+}
