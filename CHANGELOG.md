@@ -2,6 +2,28 @@
 
 All notable changes to VisionX. Generated from `releases.json`; edit that file, not this one.
 
+## 1.20.0 (2026-10-30): Opens every time, and AI is one tap away
+
+- 🚀 **Opens every time**: No more blank screen when you open VisionX from its widget, tap quickly or iCloud is slow.
+- ✦ **Turn on AI in a tap**: Without an AI key, a short card shows what Claude or OpenAI add and takes you to AI settings.
+- 🧾 **See how it opened**: Settings › Updates › Start-up log shows what happened the last times VisionX opened.
+
+**Changes**
+
+- Safe start-up (app-blueprints · safe-startup 1.0.0): an empty window in the launch screen's colour first, then the page, then your presets, triggers and sessions handed over in pieces
+- Only one VisionX window at a time: a quick second tap on the widget waits up to 1.5 s for the first, then opens anyway
+- The update check and the widget's logo tile start a few seconds after the first screen, so they never slow the start
+- Settings › Updates › Start-up log: the last 40 lines of what happened when VisionX opened; a stalled start says so on screen
+- AI invitation (app-blueprints · ai-invitation 1.2.0): without a Claude or OpenAI key, at most every 3 days (weekly after four "Later"s), never on a launch that offers an update, never during a capture session, and "Don't remind me again" ends it
+- No invitation while Apple Intelligence is in use (picked under Analyze with and already used in a saved session): AI already works for you
+- Removing your last key brings the invitation back from the next launch
+- Settings › Built with lists the AI invitation blueprint
+
+**Fixes**
+
+- VisionX could open to a blank screen when opened from its widget, after quick taps, or while iCloud was slow, because settings and data were read and the page built before the window was on screen
+- Settings are never saved over when iCloud didn't hand them over in time, and presets and token usage are never saved before they were read
+
 ## 1.19.1 (2026-10-30): Headline numbers as tiles
 
 - 🔢 **Number tiles work**: Ask for two to four headline numbers and the summary shows them as big tiles.
