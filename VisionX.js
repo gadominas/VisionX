@@ -33,7 +33,7 @@ const STORE_FILE = "vision-session.json"; // presets + settings, in Scriptable's
 // ───────── Version and in-app updates ─────────
 // This build's version. When releasing, bump it and add a matching entry to releases.json.
 // Keep these two lines exactly in this form (single quotes): the updater reads them from downloads.
-const VERSION = '1.23.0';
+const VERSION = '1.23.1';
 const APP_ID = 'visionx';   // unique per app, never changes
 const REPO_RAW = 'https://raw.githubusercontent.com/gadominas/VisionX/main/';
 const SCRIPT_FILE = 'VisionX.js';   // the script's file name in the repository
@@ -1566,6 +1566,15 @@ body.d-tiny .older article.open img{order:3;width:100%}
 .sesCard b{display:block;font-size:15px}
 .sesCard .m{display:block;font-size:12px;color:var(--graphite);margin-top:2px}
 .sesCard .s{font-size:13px;color:var(--graphite);margin-top:4px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+/* Delete right on the card: tap the bin, then "Delete?" within 3 s */
+.sesItem{position:relative}
+.sesItem .sesCard{padding-right:52px}
+.sesDel{position:absolute;top:8px;right:8px;height:36px;min-width:36px;padding:0 9px;display:flex;align-items:center;justify-content:center;gap:5px;border:0;border-radius:999px;background:transparent;color:var(--graphite);font:700 13px/1 -apple-system,system-ui,sans-serif;cursor:pointer;transition:background .15s,color .15s}
+.sesDel svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.sesDel:hover,.sesDel:focus-visible{color:var(--rec);background:color-mix(in srgb,var(--rec) 12%,transparent)}
+.sesDel:focus-visible{outline:2px solid var(--rec);outline-offset:1px}
+.sesDel.armed{background:var(--rec);color:#fff}
+.sesDel:disabled{opacity:.5}
 .sesEmpty{text-align:center;padding:30px 8px;color:var(--graphite)}
 .report h1{font:700 calc(24px * var(--ts,1))/1.15 ui-rounded,-apple-system,system-ui,sans-serif;margin:10px 0 2px}
 .report h2{font-size:calc(15px * var(--ts,1));margin:20px 0 8px}
@@ -4384,6 +4393,7 @@ function clientApp(BOOT) {
     const wrap = el("div");
     wrap.style.marginTop = "12px";
     sessions.forEach((m) => {
+      const item = el("div", "sesItem");
       const b = el("button", "sesCard");
       b.type = "button";
       if (m.thumb) { const i = new Image(); i.src = m.thumb; i.alt = ""; b.appendChild(i); } else b.appendChild(el("span", "noimg"));
@@ -4391,12 +4401,51 @@ function clientApp(BOOT) {
       t.append(
         el("b", null, fmtDay(m.startedAt) + ", " + fmtClock(m.startedAt)),
         el("span", "m", [fmtDur(m.endedAt - m.startedAt), m.photos + (m.photos === 1 ? " photo" : " photos"), m.fired ? m.fired + " trigger run" + (m.fired === 1 ? "" : "s") : "", m.preset].filter(Boolean).join(", ")),
-        el("span", "s", m.summary || "No photo was analyzed."));
+        el("span", "s", plainSnippet(m.summary) || "No photo was analyzed."));
       b.appendChild(t);
       b.addEventListener("click", () => openSession(m.id));
-      wrap.appendChild(b);
+      item.append(b, sessionDeleteButton(m));
+      wrap.appendChild(item);
     });
     box.appendChild(wrap);
+  }
+
+  // A one-line preview: the summary's Markdown read as plain text (no ** or # or table pipes).
+  function plainSnippet(md) {
+    return String(md || "")
+      .replace(/\x60\x60\x60[\s\S]*?\x60\x60\x60/g, " ")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/^\s*\|?\s*:?-{2,}.*$/gm, " ")
+      .replace(/\|/g, " ")
+      .replace(/^\s{0,3}(#{1,6}|[-*+]|\d+[.)]|>)\s+/gm, "")
+      .replace(/(\*\*|__|\*|_|\x60|~~)(\S(?:.*?\S)?)\1/g, "$2")
+      .replace(/\s+/g, " ").trim();
+  }
+  // The bin on a saved session's card: the first tap asks, a second tap within 3 s deletes.
+  function sessionDeleteButton(m) {
+    const ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"></path></svg>';
+    const label = "Delete the session of " + fmtDay(m.startedAt) + ", " + fmtClock(m.startedAt);
+    const del = el("button", "sesDel");
+    del.type = "button";
+    del.innerHTML = ICON;
+    del.setAttribute("aria-label", label);
+    let timer = 0;
+    const disarm = () => { clearTimeout(timer); del.classList.remove("armed"); del.innerHTML = ICON; del.setAttribute("aria-label", label); };
+    del.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      if (!del.classList.contains("armed")) {
+        del.classList.add("armed");
+        del.innerHTML = ICON + "Delete?";
+        del.setAttribute("aria-label", "Tap again to delete this session");
+        timer = setTimeout(disarm, 3000);
+        return;
+      }
+      clearTimeout(timer);
+      del.disabled = true;
+      try { sessions = (await nativeCall("sessionDelete", { id: m.id }, 20000)) || []; renderTabs(); showSessionList(); }
+      catch (err) { del.disabled = false; disarm(); showError("Couldn\u2019t delete the session: " + err.message); }
+    });
+    return del;
   }
 
   async function openSession(id) {

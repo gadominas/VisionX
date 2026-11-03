@@ -4,6 +4,35 @@
   "script": "VisionX.js",
   "releases": [
     {
+      "version": "1.23.1",
+      "date": "2026-11-03",
+      "title": "Delete sessions from the list",
+      "highlights": [
+        {
+          "icon": "🗑️",
+          "title": "Delete on the card",
+          "text": "Each saved session has a bin: tap it, then Delete? to remove it."
+        },
+        {
+          "icon": "🛡️",
+          "title": "No accidental deletes",
+          "text": "The first tap only asks; it lapses back after 3 seconds."
+        },
+        {
+          "icon": "🧾",
+          "title": "Cleaner previews",
+          "text": "Session cards show the summary as plain text, without ** or # marks."
+        }
+      ],
+      "changes": [
+        "Sessions list: a bin on each card deletes that session (tap, then Delete? within 3 s); the card itself still opens the report",
+        "Session card previews read the summary's Markdown as plain text"
+      ],
+      "fixes": [
+        "Session cards showed raw Markdown such as **8 distinct cars**"
+      ]
+    },
+    {
       "version": "1.23.0",
       "date": "2026-11-03",
       "title": "Capture when you choose",

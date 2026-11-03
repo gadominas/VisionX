@@ -39,7 +39,7 @@ Your iPhone as an AI smart camera: it takes a photo every few seconds, has Claud
 - **Markdown summaries.** Summaries render Markdown from the model: headings, lists, tables, code blocks, donut, bar and line charts, headline-number tiles, and gauges (`<meter>`, `<progress>`). **✨ Make it visual** rewrites your instructions to ask for them.
 - **Refine with AI.** Expand the instructions into a full-screen editor. **Refine with AI** rewrites them so the model knows exactly what to look for, count and ignore. Pick Clearer, More specific or Shorter, or say what should change, then use the suggestion or keep your own.
 - **Your instructions, as presets.** It does whatever you describe, such as "Count the different people and summarize them". Save instructions you like as presets, and choose Claude, OpenAI or Apple Intelligence to analyze the photos.
-- **Saved sessions.** Ending a session saves it on this iPhone with its summary, stats, trigger results, last photos and debug log, and opens its report in the Sessions tab.
+- **Saved sessions.** Ending a session saves it on this iPhone with its summary, stats, trigger results, last photos and debug log, and opens its report in the Sessions tab. To delete one, tap the bin on its card, then **Delete?** within 3 seconds.
 - **Debug log.** The last 10 photos are kept with exactly what was sent and what came back, as received and as understood, plus every trigger check. **Copy as JSON** copies the log without the photos.
 - **Widget, launch screen, settings and updates.** A Home Screen and Lock Screen widget, a launch screen where the eye draws itself, Settings with colours and layout, and in-app updates, all from the shared [app-blueprints](https://github.com/gadominas/app-blueprints).
 

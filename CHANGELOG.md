@@ -2,6 +2,21 @@
 
 All notable changes to VisionX. Generated from `releases.json`; edit that file, not this one.
 
+## 1.23.1 (2026-11-03): Delete sessions from the list
+
+- 🗑️ **Delete on the card**: Each saved session has a bin: tap it, then Delete? to remove it.
+- 🛡️ **No accidental deletes**: The first tap only asks; it lapses back after 3 seconds.
+- 🧾 **Cleaner previews**: Session cards show the summary as plain text, without ** or # marks.
+
+**Changes**
+
+- Sessions list: a bin on each card deletes that session (tap, then Delete? within 3 s); the card itself still opens the report
+- Session card previews read the summary's Markdown as plain text
+
+**Fixes**
+
+- Session cards showed raw Markdown such as **8 distinct cars**
+
 ## 1.23.0 (2026-11-03): Capture when you choose
 
 - 📸 **Manual capture**: Start in Manual and a photo is taken only when you tap Capture.
