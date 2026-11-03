@@ -33,7 +33,7 @@ const STORE_FILE = "vision-session.json"; // presets + settings, in Scriptable's
 // ───────── Version and in-app updates ─────────
 // This build's version. When releasing, bump it and add a matching entry to releases.json.
 // Keep these two lines exactly in this form (single quotes): the updater reads them from downloads.
-const VERSION = '1.22.0';
+const VERSION = '1.23.0';
 const APP_ID = 'visionx';   // unique per app, never changes
 const REPO_RAW = 'https://raw.githubusercontent.com/gadominas/VisionX/main/';
 const SCRIPT_FILE = 'VisionX.js';   // the script's file name in the repository
@@ -1818,6 +1818,33 @@ body.sess #liveOn{min-height:calc(100vh + 200px)}
 .liveGrid.mini .zoomChips button{height:22px;min-width:24px;font-size:10px}
 .liveGrid.mini .liveTag,.liveGrid.mini .nowBadge{top:4px;left:4px;font-size:9px;padding:1px 5px}
 @media (prefers-reduced-motion:reduce){.liveGrid.sized .livePane .liveWrap,.liveGrid.sized .liveApple,.liveGrid.sized .nowPhoto,.liveGrid.sized .lastPhoto{transition:none}}
+/* Manual capture and the photo queue (in the sticky photo row) */
+.capBar{grid-column:1/-1;display:flex;align-items:center;gap:10px;margin-top:2px}
+.capMode{display:flex;flex:none;background:var(--field);border-radius:999px;padding:3px;gap:2px}
+.capMode button{height:30px;padding:0 11px;border:0;border-radius:999px;background:transparent;color:var(--graphite);font:600 12px/1 -apple-system,system-ui,sans-serif;cursor:pointer}
+.capMode button[aria-checked=true]{background:var(--surface);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.14)}
+.capMode button:focus-visible,.capBtn:focus-visible{outline:2px solid var(--done);outline-offset:2px}
+.capQ{flex:1;min-width:0}
+.capSlots{display:grid;grid-template-columns:repeat(10,minmax(0,1fr));gap:3px}
+.capSlots i{height:8px;border-radius:3px;background:var(--field)}
+.capSlots i.w{background:var(--graphite)}
+.capSlots i.a{background:var(--amber,#B45309);animation:pulse 1s ease-in-out infinite}
+.capSlots.full i{background:var(--rec)}
+.capSlots.full i.a{background:var(--amber,#B45309)}
+.capProg{height:3px;border-radius:2px;background:var(--field);margin-top:5px;overflow:hidden}
+.capProg span{display:block;height:100%;width:0;background:var(--done);transition:width .3s ease}
+.capTxt{grid-column:1/-1;font-size:12px;color:var(--graphite);margin-top:-2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.capTxt b{color:var(--ink)}
+.capBtn{flex:none;display:flex;align-items:center;gap:6px;height:40px;padding:0 14px 0 11px;border:0;border-radius:999px;background:var(--rec);color:#fff;font:700 14px/1 -apple-system,system-ui,sans-serif;cursor:pointer;box-shadow:0 0 0 3px color-mix(in srgb,var(--rec) 25%,transparent)}
+.capBtn svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.capBtn:disabled{opacity:.4;cursor:default;box-shadow:none}
+.capBtn:active:not(:disabled){transform:scale(.96)}
+.liveWrap.snap::after{content:"";position:absolute;inset:0;background:#fff;animation:vxsnap .35s ease-out forwards;pointer-events:none}
+@keyframes vxsnap{from{opacity:.85}to{opacity:0}}
+.liveGrid.mini .capTxt{display:none}
+.liveGrid.mini .capBar{margin-top:0}
+.liveGrid.mini .capBtn{height:34px}
+@media (prefers-reduced-motion:reduce){.capSlots i.a{animation:none}.liveWrap.snap::after{animation:none;opacity:0}}
 /* Layers: modal 10, editor 20, update 30, Settings 50, AI settings 60 (it opens from Settings), toasts 70 */
 #usageask{background:var(--sheet);border:1px solid var(--rule);border-radius:16px;padding:14px 16px;margin:0 0 14px}
 #usageask b{font-size:calc(16px * var(--ts))}
@@ -2015,6 +2042,7 @@ body:not(.booted) .view,body:not(.booted) #verLine{display:none}
       </details>
     </div>
     <div class="grid">
+      <div><label for="startMode">Start in</label><select id="startMode"><option value="auto">Automatic</option><option value="manual">Manual (tap to capture)</option></select></div>
       <div><label for="interval">Photo every (seconds)</label><input id="interval" type="number" min="2" step="1" inputmode="numeric"></div>
       <div class="oa"><label for="facing">Camera</label><select id="facing"><option value="environment">Back</option><option value="user">Front</option></select></div>
       <div class="oa"><label for="detail">Image detail (OpenAI)</label><select id="detail"><option value="low">Low (fewest tokens)</option><option value="auto">Auto</option><option value="high">High</option></select></div>
@@ -2141,6 +2169,12 @@ body:not(.booted) .view,body:not(.booted) #verLine{display:none}
       <div class="lastPhoto empty" id="lastPhoto"></div>
       <figcaption id="lastCap">Analyzed</figcaption>
     </figure>
+    <div class="capBar" id="capBar">
+      <div class="capMode" role="radiogroup" aria-label="Capture mode"><button type="button" role="radio" data-m="manual" aria-checked="false">Manual</button><button type="button" role="radio" data-m="auto" aria-checked="true">Auto</button></div>
+      <div class="capQ"><div class="capSlots" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><div class="capProg" aria-hidden="true"><span id="capFill"></span></div></div>
+      <button type="button" class="capBtn" id="capBtn" aria-label="Capture a photo" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l2-2.5h6L17 8h3v11H4z"></path><circle cx="12" cy="13.5" r="3.5"></circle></svg>Capture</button>
+    </div>
+    <div class="capTxt num" id="capTxt" aria-live="polite"></div>
   </div>
   <section class="hero" aria-label="Latest photo and summary">
     <div class="heroSummary" id="heroSummary">
@@ -2288,11 +2322,12 @@ function clientApp(BOOT) {
   const PRESET_IDS = ["preset", "pUpdate", "pNew", "pDelete", "pName", "pSave", "pCancel", "iRefine", "iVisual", "iExpand", "applePhotos"];
   // Claude or OpenAI, as chosen in AI settings. Keys never reach this page.
   const cloud = { hasKey: !!(BOOT.ai && BOOT.ai.hasKey), name: (BOOT.ai && BOOT.ai.name) || "Claude", model: (BOOT.ai && BOOT.ai.model) || "" };
-  const FIELDS = ["instructions", "interval", "engine", "shortcut", "checkShortcut", "detail", "maxSide", "facing"];
+  const FIELDS = ["instructions", "startMode", "interval", "engine", "shortcut", "checkShortcut", "detail", "maxSide", "facing"];
   const TRIG_IDS = ["accumulate", "tAdd", "tName", "tCond", "tWhen", "tEvery", "tMode", "tShortcut", "tLoadSc", "tPick", "tSend", "tMsg", "tSave", "tDup", "tDelete", "tCancel"];
   const DEFAULTS = {
     instructions: "Count the different people you see and summarize them: appearance, what they are doing, and when they first appeared.",
     interval: 10,
+    startMode: "auto",   // "auto": a photo every N seconds; "manual": only when Capture is tapped
     detail: "auto",
     maxSide: 768,
     facing: "environment",
@@ -2314,6 +2349,7 @@ function clientApp(BOOT) {
   let shortcutChain = Promise.resolve();
   let queuedUpdate = null;
   let anlPendingIdx = 0, anlDoneIdx = 0, anlDoneAt = 0;
+  const QUEUE_MAX = 10;   // photos waiting or being analyzed (manual capture)
   let trigSig = "", trigOpen = {}, trigOffOpen = false;
   const SEND_KINDS = ["summary", "frame", "raw", "parsed", "state", "all", "custom"];
   const SEND_HINTS = {
@@ -2357,6 +2393,7 @@ function clientApp(BOOT) {
   $("applePhotos").addEventListener("change", () => { cfg.applePhotos = $("applePhotos").checked; persist(); });
   wireZoom();
   wireZoomChips();
+  wireCapture();
   $("accumulate").addEventListener("change", () => { cfg.accumulate = $("accumulate").checked; persist(); updateModeUI(); });
   updateModeUI();
   $("checkShortcut").addEventListener("change", () => { cfg.checkShortcut = $("checkShortcut").value.trim() || DEFAULTS.checkShortcut; persist(); });
@@ -2955,6 +2992,7 @@ function clientApp(BOOT) {
     cfg = Object.assign({}, cfg, {
       instructions: $("instructions").value.trim() || DEFAULTS.instructions,
       interval: Math.max(2, parseInt($("interval").value, 10) || DEFAULTS.interval),
+      startMode: $("startMode").value === "manual" ? "manual" : "auto",
       detail: $("detail").value,
       maxSide: parseInt($("maxSide").value, 10) || DEFAULTS.maxSide,
       facing: $("facing").value,
@@ -2978,6 +3016,7 @@ function clientApp(BOOT) {
     return {
       running: false, stream: null, ctrl: null, frames: [], state: {}, summary: "",
       seq: 0, busyIdx: 0, nextAt: 0, fatal: null, wake: null, sleepTimer: null,
+      mode: "auto", queue: [], qActive: false, qDone: 0, qTotal: 0, lastAuto: 0,
       trig: {}, trigOrder: [], debug: [],
       stats: { photos: 0, requests: 0, ok: 0, failed: 0, cancelled: 0, checks: 0, fired: 0,
                prompt: 0, completion: 0, total: 0, latency: 0, start: 0, end: 0 },
@@ -3017,6 +3056,7 @@ function clientApp(BOOT) {
       return;
     }
     S.running = true;
+    S.mode = cfg.startMode === "manual" ? "manual" : "auto";
     S.stats.start = Date.now();
     nativeCall("usage-event", { e: "session_started", engine: isApple() ? "apple" : "cloud" }, 10000).catch(function () {});
     sendWidget(S);
@@ -3061,18 +3101,35 @@ function clientApp(BOOT) {
   async function loop(sess) {
     while (sess.running) {
       if (sess.paused) { await new Promise((r) => { sess.resumeWake = r; }); if (!sess.running) break; }
-      const t0 = Date.now();
-      await shoot(sess);
+      if (sess.queue.length) {                       // captured photos first, in order
+        const item = sess.queue.shift();
+        sess.qActive = true;
+        renderCapture();
+        await shoot(sess, item);
+        sess.qActive = false;
+        sess.qDone++;
+        renderCapture();
+      } else if (sess.mode === "auto") {             // a timed photo once the interval is up
+        const left = sess.lastAuto ? cfg.interval * 1000 - (Date.now() - sess.lastAuto) : 0;
+        if (left > 0) { await pause(sess, left); continue; }
+        sess.lastAuto = Date.now();
+        await shoot(sess);
+      } else {                                       // manual: wait for a tap
+        renderCapture();
+        await waitForCapture(sess);
+        continue;
+      }
       if (sess.fatal) { showError(sess.fatal); await endSession(); break; }
-      if (!sess.running) break;
-      await pause(sess, cfg.interval * 1000 - (Date.now() - t0));
     }
+    sess.queue = [];
+    sess.qActive = false;
+    if (sess === S) renderCapture();
   }
 
-  async function shoot(sess) {
+  async function shoot(sess, item) {
     if (isApple()) return shootApple(sess);
-    let img;
-    try {
+    let img = item && item.img;   // a captured photo was taken at the tap
+    if (!img) try {
       await ensureCamera(sess);
       if (!sess.running) return;
       img = captureFrame();
@@ -3080,7 +3137,7 @@ function clientApp(BOOT) {
 
     sess.stats.photos++;
     sendWidget(sess);
-    const frame = { idx: ++sess.seq, img, time: new Date().toLocaleTimeString(), pending: true, t0: Date.now() };
+    const frame = { idx: ++sess.seq, img, time: (item && item.time) || new Date().toLocaleTimeString(), pending: true, t0: Date.now(), manual: !!item };
     sess.frames.unshift(frame);
     if (sess.frames.length > KEEP_FRAMES) sess.frames.length = KEEP_FRAMES; // older photos dropped from memory
     sess.busyIdx = frame.idx;
@@ -3805,6 +3862,7 @@ function clientApp(BOOT) {
     $("hPause").classList.toggle("resume", !!paused);
     $("statusBox").classList.toggle("paused", !!paused);
     sessChrome();
+    renderCapture();
   }
   function pauseSession() {
     const sess = S;
@@ -3832,6 +3890,78 @@ function clientApp(BOOT) {
   function pausedMs(sess) {
     return (sess.stats.paused || 0) + (sess.paused && sess.pausedAt ? Date.now() - sess.pausedAt : 0);
   }
+  // ── manual capture and the photo queue ──
+  // A tap grabs the frame at once and queues it; the loop analyzes queued photos first, in order.
+  function queueCount(sess) { return (sess.queue ? sess.queue.length : 0) + (sess.qActive ? 1 : 0); }
+  function captureNow() {
+    const sess = S;
+    if (!sess.running || sess.paused || queueCount(sess) >= QUEUE_MAX) return;
+    let item;
+    if (isApple()) item = { apple: true, at: Date.now() };   // Shortcuts takes this photo when its turn comes
+    else {
+      try { item = { img: captureFrame(), time: new Date().toLocaleTimeString(), at: Date.now() }; }
+      catch (e) { showError("Camera: " + e.message); return; }
+      const lw = $("liveWrap");
+      lw.classList.remove("snap"); void lw.offsetWidth; lw.classList.add("snap");
+    }
+    if (!sess.queue.length && !sess.qActive) { sess.qDone = 0; sess.qTotal = 0; }   // a new batch
+    sess.queue.push(item);
+    sess.qTotal++;
+    renderCapture();
+    updateNowWait();
+    wake(sess);   // the loop may be waiting for a tap or for the next timed photo
+  }
+  function setCaptureMode(m) {
+    const sess = S;
+    if (!sess.running || (m !== "manual" && m !== "auto") || sess.mode === m) return;
+    sess.mode = m;
+    sess.lastAuto = 0;    // switching to Auto takes the first timed photo right away
+    renderCapture();
+    updateNowWait();
+    wake(sess);
+  }
+  function waitForCapture(sess) {
+    return new Promise((resolve) => {
+      if (!sess.running || sess.paused || sess.queue.length || sess.mode !== "manual") return resolve();
+      sess.nextAt = 0;
+      sess.wake = resolve;
+    });
+  }
+  function renderCapture() {
+    const bar = $("capBar");
+    if (!bar) return;
+    const sess = S;
+    const mode = sess.running ? sess.mode : (cfg.startMode === "manual" ? "manual" : "auto");
+    bar.querySelectorAll(".capMode button").forEach((b) => b.setAttribute("aria-checked", b.dataset.m === mode ? "true" : "false"));
+    const n = queueCount(sess), waiting = sess.queue ? sess.queue.length : 0, full = n >= QUEUE_MAX;
+    const slots = bar.querySelector(".capSlots");
+    slots.classList.toggle("full", full);
+    [...slots.children].forEach((s, i) => { s.className = i === 0 && sess.qActive ? "a" : i < n ? "w" : ""; });
+    const total = sess.qTotal || 0, done = sess.qDone || 0;
+    $("capFill").style.width = total ? Math.round(100 * done / total) + "%" : "0%";
+    let txt;
+    if (!sess.running) txt = "Capture starts with the session.";
+    else if (sess.paused) txt = "Paused. Resume to capture.";
+    else if (full) txt = "<b>Queue full</b> (" + QUEUE_MAX + "). Capture is back when a photo finishes.";
+    else if (n) {
+      const exp = expectedAnalysisMs(), cur = S.frames[0];
+      const curLeft = sess.qActive && cur && cur.pending ? Math.max(0, exp - (Date.now() - (cur.t0 || Date.now()))) : 0;
+      const eta = Math.ceil((curLeft + waiting * exp) / 1000);
+      txt = "<b>" + done + " of " + total + "</b> done \u00B7 " + (total - done) + " left \u00B7 \u2248 " + eta + " s";
+    }
+    else if (total) txt = "All " + total + " analyzed. " + (mode === "manual" ? "Tap Capture for more." : "Next timed photo soon.");
+    else txt = mode === "manual" ? "Queue empty. Tap Capture to take a photo." : "A photo every " + cfg.interval + " s. Capture adds one now.";
+    $("capTxt").innerHTML = txt;
+    const btn = $("capBtn");
+    btn.disabled = !sess.running || sess.paused || full;
+    btn.setAttribute("aria-label", full ? "Capture: queue full" : "Capture a photo, " + n + " of " + QUEUE_MAX + " in the queue");
+  }
+  function wireCapture() {
+    $("capBtn").addEventListener("click", captureNow);
+    document.querySelectorAll("#capBar .capMode button").forEach((b) => b.addEventListener("click", () => setCaptureMode(b.dataset.m)));
+    renderCapture();
+  }
+
   // ── while a session runs: tabs and status line hidden; the photo row sticks and halves on scroll ──
   function sessChrome() {
     document.body.classList.toggle("sess", !!S.running);
@@ -4049,6 +4179,8 @@ function clientApp(BOOT) {
     if (!S.running) small = "Starts with the session";
     else if (S.paused) { big = "\u23F8"; small = "Paused"; }
     else if (S.triggerWaitIdx) { big = "\u2026"; small = "Running triggers"; }
+    else if (S.queue && S.queue.length) { big = String(S.queue.length); small = "waiting in the queue"; }
+    else if (S.mode === "manual") { big = "\u25C9"; small = "Tap Capture"; }
     else if (S.nextAt) { big = Math.max(0, Math.ceil((S.nextAt - Date.now()) / 1000)) + " s"; small = "to the next photo"; }
     else { big = "\u2026"; small = "Taking a photo"; }
     w.innerHTML = (big ? "<b>" + escHTML(big) + "</b>" : "") + escHTML(small);
@@ -5300,6 +5432,7 @@ function clientApp(BOOT) {
     else setStatus("Taking a photo\u2026");
     renderCountdown();
     updateNowWait();
+    renderCapture();
   }
 
   // ── rendering ──

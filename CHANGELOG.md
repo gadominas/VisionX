@@ -2,6 +2,21 @@
 
 All notable changes to VisionX. Generated from `releases.json`; edit that file, not this one.
 
+## 1.23.0 (2026-11-03): Capture when you choose
+
+- 📸 **Manual capture**: Start in Manual and a photo is taken only when you tap Capture.
+- 🧮 **A queue of up to 10**: Tap as often as you like: photos wait their turn, with a meter and time left.
+- 🔁 **Manual or Auto, any time**: Switch between Manual and Auto with one tap, mid-session.
+
+**Changes**
+
+- Setup › Start in: Automatic (a photo every few seconds, as before) or Manual (only when Capture is tapped)
+- Capture takes the photo at the tap and queues it; queued photos are analyzed first, in order
+- The queue holds up to 10 photos (including the one being analyzed); Capture is disabled while it is full or the session is paused
+- Capture bar in the pinned photo row: Manual | Auto switch, a 10-slot queue meter, the batch's progress bar and "done · left · time left"
+- The Analyzing tile shows "Tap Capture" in Manual, and how many photos wait in the queue
+- In Auto, a tap analyzes an extra photo straight away; the timed photos keep their rhythm
+
 ## 1.22.0 (2026-10-31): Anonymous usage, if you agree
 
 - 📊 **Help shape VisionX**: If you agree, VisionX sends anonymous counts of the features you use. Nothing else.
