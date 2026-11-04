@@ -2,6 +2,20 @@
 
 All notable changes to VisionX. Generated from `releases.json`; edit that file, not this one.
 
+## 1.23.2 (2026-11-03): Works without iCloud
+
+- 📱 **Opens without iCloud**: VisionX now opens on iPhones that aren't signed in to iCloud.
+- 💾 **Kept on the phone**: Without iCloud, your settings are saved on the phone instead.
+- ☁️ **iCloud as before**: Signed in to iCloud? Nothing changes: everything stays in iCloud Drive.
+
+**Changes**
+
+- Without iCloud, settings are kept in Files › On My iPhone › Scriptable
+
+**Fixes**
+
+- On an iPhone not signed in to iCloud, VisionX stopped at once with "iCloud is not supported"
+
 ## 1.23.1 (2026-11-03): Delete sessions from the list
 
 - 🗑️ **Delete on the card**: Each saved session has a bin: tap it, then Delete? to remove it.

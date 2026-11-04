@@ -4,6 +4,34 @@
   "script": "VisionX.js",
   "releases": [
     {
+      "version": "1.23.2",
+      "date": "2026-11-03",
+      "title": "Works without iCloud",
+      "highlights": [
+        {
+          "icon": "📱",
+          "title": "Opens without iCloud",
+          "text": "VisionX now opens on iPhones that aren't signed in to iCloud."
+        },
+        {
+          "icon": "💾",
+          "title": "Kept on the phone",
+          "text": "Without iCloud, your settings are saved on the phone instead."
+        },
+        {
+          "icon": "☁️",
+          "title": "iCloud as before",
+          "text": "Signed in to iCloud? Nothing changes: everything stays in iCloud Drive."
+        }
+      ],
+      "changes": [
+        "Without iCloud, settings are kept in Files › On My iPhone › Scriptable"
+      ],
+      "fixes": [
+        "On an iPhone not signed in to iCloud, VisionX stopped at once with \"iCloud is not supported\""
+      ]
+    },
+    {
       "version": "1.23.1",
       "date": "2026-11-03",
       "title": "Delete sessions from the list",
