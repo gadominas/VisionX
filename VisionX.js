@@ -33,7 +33,7 @@ const STORE_FILE = "vision-session.json"; // presets + settings, in Scriptable's
 // ───────── Version and in-app updates ─────────
 // This build's version. When releasing, bump it and add a matching entry to releases.json.
 // Keep these two lines exactly in this form (single quotes): the updater reads them from downloads.
-const VERSION = '1.23.1';
+const VERSION = '1.23.2';
 const APP_ID = 'visionx';   // unique per app, never changes
 const REPO_RAW = 'https://raw.githubusercontent.com/gadominas/VisionX/main/';
 const SCRIPT_FILE = 'VisionX.js';   // the script's file name in the repository
@@ -55,7 +55,7 @@ const KC_INSTALL = 'visionx-install-id';
 const BLUEPRINTS_REPO = 'https://github.com/gadominas/app-blueprints';
 const BLUEPRINTS = [
   { id: 'in-app-updates', name: 'In-app updates', version: '1.0.0', since: '1.7.0' },
-  { id: 'settings', name: 'Settings', version: '1.1.0', since: '1.21.0' },
+  { id: 'settings', name: 'Settings', version: '1.1.1', since: '1.23.2' },
   { id: 'ai-configuration', name: 'AI configuration', version: '1.0.0', since: '1.8.0' },
   { id: 'launch-screen', name: 'Launch screen', version: '1.0.0', since: '1.17.1' },
   { id: 'widgets', name: 'Widgets', version: '1.0.0', since: '1.19.0' },
@@ -77,7 +77,9 @@ const AI_INVITE = {
 // ───────── Settings (app-blueprints · settings) ─────────
 // Appearance, updates and tunables live in settings.json in iCloud Drive › Scriptable › VisionX.
 // Presets, triggers and the session picks stay in vision-session.json (on this iPhone only), as before.
-const sfm = (() => { try { return FileManager.iCloud(); } catch (e) { return FileManager.local(); } })();
+// iCloud Drive when the phone is signed in to iCloud, otherwise the phone itself (settings blueprint 1.1.1):
+// FileManager.iCloud() itself never fails; asking it for its folder does, so ask inside the try.
+const sfm = (() => { try { const ic = FileManager.iCloud(); ic.documentsDirectory(); return ic; } catch (e) { return FileManager.local(); } })();
 const SET_DIR = sfm.joinPath(sfm.documentsDirectory(), "VisionX");
 const SP = (n) => sfm.joinPath(SET_DIR, n + ".json");
 // A short start-up log on the phone (local, not iCloud): Settings › Updates › Start-up log, and on screen if opening stalls.
