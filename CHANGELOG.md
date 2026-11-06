@@ -2,6 +2,19 @@
 
 All notable changes to VisionX. Generated from `releases.json`; edit that file, not this one.
 
+## 1.23.5 (2026-11-07): Ready for the App Store
+
+- 📱 **Ready for the App Store**: Built as an app of its own, VisionX gets new versions from the App Store instead of downloading them.
+- 🔌 **Buttons work everywhere**: The page talks to VisionX the same way in Scriptable and in an app of its own, so every button keeps working.
+- ✅ **Checked on every change**: Every change now runs the shared app tests: start-up, widget, updates and usage counts.
+
+**Changes**
+
+- In-app updates 1.1.0: in a native shell (BuildIt) there is no update check or installer, and Settings › Updates says new versions come through the App Store
+- Portable bridge recipe: the page hands its vsbridge:// calls to window.__hostBridge when a native shell provides one
+- Testing recipe: the app-blueprints testkit (lint and five conformance packs) runs on every push (.github/workflows/tests.yml)
+- Blueprint trace: Stability patterns 1.0.1, AI configuration 1.0.1, Launch screen 1.0.1, Widgets 1.1.1
+
 ## 1.23.4 (2026-11-06): Small fixes, now tested
 
 - 🗂 **Sessions stay listed**: A damaged sessions list is rebuilt from the sessions still on your iPhone.
