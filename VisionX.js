@@ -33,12 +33,14 @@ const STORE_FILE = "vision-session.json"; // presets + settings, in Scriptable's
 // ───────── Version and in-app updates ─────────
 // This build's version. When releasing, bump it and add a matching entry to releases.json.
 // Keep these two lines exactly in this form (single quotes): the updater reads them from downloads.
-const VERSION = '1.23.4';
+const VERSION = '1.23.5';
 const APP_ID = 'visionx';   // unique per app, never changes
 const REPO_RAW = 'https://raw.githubusercontent.com/gadominas/VisionX/main/';
 const SCRIPT_FILE = 'VisionX.js';   // the script's file name in the repository
 const UPDATE_SNOOZE_MS = 2 * 24 * 3600 * 1000;   // "Later" = 2 days
 const KC_UPDATE_SNOOZE = 'visionx-update-snooze';   // Keychain key, unique per app
+// In a native shell (BuildIt) new versions come from the App Store or TestFlight, never from GitHub (Step 8).
+const NATIVE_SHELL = (() => { try { return config.runsInNativeShell === true; } catch (e) { return false; } })();
 
 // ── Anonymous usage counts (opt-in), sent to PostHog (app-blueprints · usage-analytics) ──
 // Nothing is sent until KEY is filled in AND the person agrees. Each event carries a random install ID
@@ -54,12 +56,12 @@ const KC_INSTALL = 'visionx-install-id';
 // inventory tools read it without running the script, and Settings › Built with shows it.
 const BLUEPRINTS_REPO = 'https://github.com/gadominas/app-blueprints';
 const BLUEPRINTS = [
-  { id: 'stability-patterns', name: 'Stability patterns', version: '1.0.0', since: '1.23.3' },
-  { id: 'in-app-updates', name: 'In-app updates', version: '1.0.1', since: '1.23.3' },
+  { id: 'stability-patterns', name: 'Stability patterns', version: '1.0.1', since: '1.23.5' },
+  { id: 'in-app-updates', name: 'In-app updates', version: '1.1.0', since: '1.23.5' },
   { id: 'settings', name: 'Settings', version: '1.1.2', since: '1.23.3' },
-  { id: 'ai-configuration', name: 'AI configuration', version: '1.0.0', since: '1.8.0' },
-  { id: 'launch-screen', name: 'Launch screen', version: '1.0.0', since: '1.17.1' },
-  { id: 'widgets', name: 'Widgets', version: '1.0.0', since: '1.19.0' },
+  { id: 'ai-configuration', name: 'AI configuration', version: '1.0.1', since: '1.23.5' },
+  { id: 'launch-screen', name: 'Launch screen', version: '1.0.1', since: '1.23.5' },
+  { id: 'widgets', name: 'Widgets', version: '1.1.1', since: '1.23.5' },
   { id: 'ai-invitation', name: 'AI invitation', version: '1.2.1', since: '1.20.0' },
   { id: 'usage-analytics', name: 'Anonymous usage analytics', version: '1.1.0', since: '1.22.0' },
 ];
@@ -630,7 +632,7 @@ function settingsState() {
     settings: Object.fromEntries(Object.keys(SET_KEYS).map((k) => [k, settings[k]])),
     cfg: Object.fromEntries(CFG_FLAT.map((d) => [d.k, cfg(d.k)])),
     cfgSchema: CONFIG.map(([title, items]) => ({ title, items })),
-    palettes: PALETTES, version: VERSION, appName: "VisionX",
+    palettes: PALETTES, version: VERSION, nativeShell: NATIVE_SHELL, appName: "VisionX",
     blueprints: BLUEPRINTS, blueprintsRepo: BLUEPRINTS_REPO,
     hasKey: !!aiKey(), aiStatus: aiStatusLine(),
     usageAvailable: usageAvailable(), usageStatus: usageStatus(),
@@ -650,6 +652,7 @@ function cmpVer(a, b) {
 
 // Never throws and never blocks: any failure just means no update is offered this time.
 async function checkForUpdate() {
+  if (NATIVE_SHELL) return null;   // Step 8: updates come through the App Store
   if (!settings.checkUpdates || updateSnoozed()) return null;
   try {
     const req = new Request(`${REPO_RAW}releases.json?t=${Date.now()}`);
@@ -691,6 +694,7 @@ function clearUpdateSnooze() {
 
 // Downloads the new script, checks it three ways, then writes it over this script's own file.
 async function applyUpdate(info) {
+  if (NATIVE_SHELL) throw new Error('This app is updated through the App Store.');   // Step 8: never download code
   const req = new Request(`${REPO_RAW}${encodeURI((info && info.script) || SCRIPT_FILE)}?t=${Date.now()}`);
   req.timeoutInterval = 30;
   const code = await req.loadString();
@@ -2506,11 +2510,15 @@ function clientApp(BOOT) {
         reject(new Error("no answer within " + Math.round(timeoutMs / 1000) + " s"));
       }, timeoutMs);
       bridge.calls[id] = c;
-      const f = document.createElement("iframe");
-      f.style.display = "none";
-      f.src = "vsbridge://call?id=" + id;
-      document.body.appendChild(f);
-      setTimeout(() => f.remove(), 2000);
+      const url = "vsbridge://call?id=" + id;
+      if (window.__hostBridge) window.__hostBridge(url);   // portable-bridge recipe
+      else {
+        const f = document.createElement("iframe");
+        f.style.display = "none";
+        f.src = url;
+        document.body.appendChild(f);
+        setTimeout(() => f.remove(), 2000);
+      }
     });
   }
   function cancelCalls() {
@@ -2787,9 +2795,11 @@ function clientApp(BOOT) {
         '<div class="srow"><div class="grow"><b>Share anonymous usage</b><small>Counts like app opens, sessions run and photos analysed, with a random install ID. Never your photos, instructions or AI answers. Off removes the ID.</small></div><button class="switch ' + (s.shareUsage ? "on" : "") + '" data-act="toggle" data-v="shareUsage" aria-label="Share anonymous usage"></button></div>' +
         '<div class="srow"><div class="grow"><b>Test the connection</b><small id="usagemsg" class="muted" aria-live="polite">' + hx(SET.usageStatus || "Sends one test event now and shows PostHog\u2019s answer.") + '</small></div><button class="sm" data-act="usage-test">Send test</button></div>' : "") +
       '<h3 class="sec">Updates</h3>' +
-      '<div class="srow"><div class="grow"><b>Offer new versions</b><small>You have VisionX ' + hx(SET.version) + ". \u201CLater\u201D waits two days.</small></div>" +
+      (SET.nativeShell
+        ? '<div class="srow"><div class="grow"><b>Updates</b><small class="muted">You have VisionX ' + hx(SET.version) + ". New versions come through the App Store (or TestFlight).</small></div></div>"
+        : '<div class="srow"><div class="grow"><b>Offer new versions</b><small>You have VisionX ' + hx(SET.version) + ". \u201CLater\u201D waits two days.</small></div>" +
         '<button class="switch ' + (s.checkUpdates ? "on" : "") + '" data-act="toggle" data-v="checkUpdates" aria-label="Offer new versions"></button></div>' +
-      '<div class="srow"><div class="grow"><b>Check for updates now</b><small id="updmsg" class="muted" aria-live="polite"></small></div><button class="sm" data-act="updcheck">Check</button></div>' +
+      '<div class="srow"><div class="grow"><b>Check for updates now</b><small id="updmsg" class="muted" aria-live="polite"></small></div><button class="sm" data-act="updcheck">Check</button></div>') +
       '<div class="srow"><div class="grow"><b>Start-up log</b><small class="muted">What happened the last times VisionX opened</small></div><button class="sm" data-act="startlog">Show</button></div>' +
       '<pre id="startlog" class="startlog" hidden></pre>' +
       SET.cfgSchema.map((sec) => '<h3 class="sec">' + hx(sec.title) + "</h3>" + sec.items.map(fieldHTML).join("")).join("") +
