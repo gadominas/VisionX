@@ -2,6 +2,24 @@
 
 All notable changes to VisionX. Generated from `releases.json`; edit that file, not this one.
 
+## 1.23.4 (2026-11-06): Small fixes, now tested
+
+- 🗂 **Sessions stay listed**: A damaged sessions list is rebuilt from the sessions still on your iPhone.
+- 📱 **Widget stops at Stop**: The widget shows your finished session right away, not ● Live.
+- ✦ **Cleaner widget summary**: The widget shows the summary as plain text, without Markdown marks.
+
+**Changes**
+
+- Automated tests: the real script runs in Node with Scriptable stand-ins, through 21 scenarios (tests/, docs/TESTING.md)
+
+**Fixes**
+
+- A damaged VisionX-sessions/index.json emptied the Sessions list, and the next session saved over it: it's now copied aside and rebuilt from the saved sessions
+- After Stop, the widget kept showing ● Live for up to 10 minutes: the update was cancelled with the session's other calls
+- The large widget showed the summary's Markdown (**bold**, table pipes, chart blocks) as text
+- Loading your shortcut list was counted as a trigger run in the anonymous usage counts
+- Error messages could show two full stops ("…context.. Allow camera access…")
+
 ## 1.23.3 (2026-11-04): Opens on any iPhone
 
 - 📱 **Opens on any iPhone**: VisionX opens on iPhones that aren't signed in to iCloud, every time.
