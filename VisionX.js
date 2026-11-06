@@ -33,7 +33,7 @@ const STORE_FILE = "vision-session.json"; // presets + settings, in Scriptable's
 // ───────── Version and in-app updates ─────────
 // This build's version. When releasing, bump it and add a matching entry to releases.json.
 // Keep these two lines exactly in this form (single quotes): the updater reads them from downloads.
-const VERSION = '1.23.3';
+const VERSION = '1.23.4';
 const APP_ID = 'visionx';   // unique per app, never changes
 const REPO_RAW = 'https://raw.githubusercontent.com/gadominas/VisionX/main/';
 const SCRIPT_FILE = 'VisionX.js';   // the script's file name in the repository
@@ -278,11 +278,28 @@ const SES_DIR = sesFm.joinPath(sesFm.documentsDirectory(), "VisionX-sessions");
 const sesPath = (id) => sesFm.joinPath(SES_DIR, String(id).replace(/[^\w-]/g, "") + ".json");
 function sesEnsureDir() { if (!sesFm.fileExists(SES_DIR)) sesFm.createDirectory(SES_DIR, true); }
 function sesIndex() {
-  try {
-    const p = sesFm.joinPath(SES_DIR, "index.json");
-    if (sesFm.fileExists(p)) { const list = JSON.parse(sesFm.readString(p)); if (Array.isArray(list)) return list; }
-  } catch (e) { console.log("Sessions: couldn't read the index: " + e); }
-  return [];
+  const p = sesFm.joinPath(SES_DIR, "index.json");
+  let txt;
+  try { if (!sesFm.fileExists(p)) return []; txt = sesFm.readString(p); }
+  catch (e) { console.log("Sessions: couldn't read the index: " + e); return []; }
+  if (typeof txt !== "string") return [];
+  try { const list = JSON.parse(txt); if (Array.isArray(list)) return list; } catch (e) {}
+  // Damaged (safe-startup 1.1.0): keep a copy aside and rebuild the list from the sessions still on this iPhone,
+  // so the next save doesn't write an index without them. sessionList() saves the rebuilt index (never the widget).
+  keepBroken(sesFm, p, "VisionX-sessions/index", txt);
+  sesIndex.rebuilt = true;
+  return sesRebuild();
+}
+// Every saved session file carries its own index entry (rec.meta): read them back, newest first.
+function sesRebuild() {
+  const list = [];
+  let names = [];
+  try { names = sesFm.listContents(SES_DIR); } catch (e) {}
+  for (const f of names) {
+    if (!/^s-[\w-]+\.json$/.test(f)) continue;
+    try { const rec = JSON.parse(sesFm.readString(sesFm.joinPath(SES_DIR, f))); if (rec && rec.meta && rec.meta.id) list.push(rec.meta); } catch (e) {}
+  }
+  return list.sort((a, b) => (b.endedAt || 0) - (a.endedAt || 0));
 }
 function sesWriteIndex(list) { sesEnsureDir(); sesFm.writeString(sesFm.joinPath(SES_DIR, "index.json"), JSON.stringify(list)); }
 // Newest first; removes sessions beyond the limit (files too) and entries whose file is gone.
@@ -295,7 +312,7 @@ function sesPrune(list) {
 function sessionList() {
   const before = sesIndex();
   const list = sesPrune(before);
-  if (list.length !== before.length) sesWriteIndex(list);
+  if (list.length !== before.length || sesIndex.rebuilt) { sesWriteIndex(list); sesIndex.rebuilt = false; }
   return list;
 }
 function sessionSave(rec) {
@@ -338,10 +355,23 @@ async function widgetModel() {
     kicker: 'Last session · ' + ago,
     title: last.preset || 'Session',
     caption: last.photos + (last.photos === 1 ? ' photo' : ' photos') + (last.fired ? ', ' + last.fired + (last.fired === 1 ? ' trigger run' : ' trigger runs') : ''),
-    rows: ran.concat(last.summary ? [{ icon: '✦', text: last.summary, lines: 3 }] : []),
+    rows: ran.concat(wPlain(last.summary) ? [{ icon: '✦', text: wPlain(last.summary), lines: 3 }] : []),
     footer: last.engine,
     accessory: { glyph: '◉', value: last.photos },
   };
+}
+
+// The summary is Markdown (bold, tables, charts in code fences) and is cut at 200 characters when saved:
+// the widget shows it as plain text, like the Sessions list does.
+function wPlain(md) {
+  return String(md || '')
+    .replace(/```[\s\S]*?(```|$)/g, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/^\s*\|?\s*:?-{2,}.*$/gm, ' ')
+    .replace(/\|/g, ' ')
+    .replace(/^\s{0,3}(#{1,6}|[-*+]|\d+[.)]|>)\s+/gm, '')
+    .replace(/(\*\*|__|\*|_|`|~~)(\S(?:.*?\S)?)\1/g, '$2')
+    .replace(/\s+/g, ' ').trim();
 }
 
 // ───────── Widget ─────────
@@ -1012,7 +1042,7 @@ async function handleBridgeCall(wv, ctx, id) {
     }
     else if (msg.type === "apple") result = await runAppleShortcut(msg.payload);
     else if (msg.type === "appleText") result = (await runShortcutText(msg.payload.shortcut, msg.payload.text)).text;
-    else if (msg.type === "runShortcut") { result = await runShortcutText(msg.payload.shortcut, msg.payload.text); track("trigger_fired"); }
+    else if (msg.type === "runShortcut") { result = await runShortcutText(msg.payload.shortcut, msg.payload.text); if (!msg.payload.list) track("trigger_fired"); }   // the shortcut list helper isn't a trigger
     else if (msg.type === "usage-consent") { setUsage((msg.payload || {}).on === "1"); flushUsage(); result = true; }
     else if (msg.type === "usage-test") {
       let ok = false, m = "";
@@ -3066,7 +3096,7 @@ function clientApp(BOOT) {
     } catch (e) {
       stopCamera();
       setStatus("Ready");
-      showError("Camera didn't start: " + (e.message || e.name) + ". Allow camera access when iOS asks, then try again.");
+      showError("Camera didn't start: " + clause(e.message || e.name) + ". Allow camera access when iOS asks, then try again.");
       starting = false;
       $("toggle").disabled = false;
       return;
@@ -3095,11 +3125,11 @@ function clientApp(BOOT) {
     if (!sess.running) return;
     sess.running = false;
     sess.stats.end = Date.now();
-    sendWidget(null);
     if (sess.paused) { sess.stats.paused = (sess.stats.paused || 0) + (sess.stats.end - sess.pausedAt); sess.paused = false; }
     if (sess.resumeWake) { const r = sess.resumeWake; sess.resumeWake = null; r(); }
     if (sess.ctrl) sess.ctrl.abort();
     cancelCalls();
+    sendWidget(null);   // after cancelCalls(), which would drop it: the widget must stop showing Live
     wake(sess);
     stopCamera();
     clearInterval(clock);
@@ -3187,7 +3217,7 @@ function clientApp(BOOT) {
       dbg.error = e.message;
       if (e.attempts) { dbg.attempts = e.attempts; dbg.dropped = e.dropped || []; }
       if (e.fatal) sess.fatal = cloud.name + " request stopped the session: " + e.message;
-      else if (!e.cancelled && sess === S) showError("Photo #" + frame.idx + " wasn't analyzed: " + e.message + ". The session keeps going.");
+      else if (!e.cancelled && sess === S) showError("Photo #" + frame.idx + " wasn't analyzed: " + clause(e.message) + ". The session keeps going.");
     } finally {
       dbg.ms = Date.now() - t0;
       frame.pending = false;
@@ -3234,7 +3264,7 @@ function clientApp(BOOT) {
       else sess.stats.failed++;
       dbg.error = e.message;
       if (e.fatal || e.bridgeDown) sess.fatal = "Apple Intelligence stopped the session: " + e.message;
-      else if (!e.cancelled && sess === S) showError("Photo #" + frame.idx + " wasn't analyzed: " + e.message + ". The session keeps going.");
+      else if (!e.cancelled && sess === S) showError("Photo #" + frame.idx + " wasn't analyzed: " + clause(e.message) + ". The session keeps going.");
     } finally {
       dbg.ms = Date.now() - t0;
       frame.pending = false;
@@ -3461,6 +3491,9 @@ function clientApp(BOOT) {
     const kb = Math.round((dataUrl.length - dataUrl.indexOf(",") - 1) * 0.75 / 1024);
     return "JPEG, " + kb + " KB";
   }
+
+  // An error message as a clause: without the full stop it may end with, so "…: <message>. Next sentence" reads right
+  function clause(m) { return String(m == null ? "" : m).replace(/[\s.]+$/, ""); }
 
   function escHTML(s) {
     return String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
@@ -5177,7 +5210,7 @@ function clientApp(BOOT) {
     btn.disabled = true;
     $("tScHint").textContent = "Opening Shortcuts to read your list\u2026";
     try {
-      const r = await withShortcutLock(() => nativeCall("runShortcut", { shortcut: LIST_SHORTCUT, text: "" }, 120000));
+      const r = await withShortcutLock(() => nativeCall("runShortcut", { shortcut: LIST_SHORTCUT, text: "", list: true }, 120000));
       const names = parseShortcutNames(r && r.text);
       if (!names.length) throw new Error("the list came back empty. Check that \u201C" + LIST_SHORTCUT + "\u201D ends with Stop and Output");
       cfg.shortcutNames = names;
