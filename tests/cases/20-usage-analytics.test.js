@@ -1,0 +1,56 @@
+// Anonymous usage (app-blueprints usage-analytics 1.1.0): nothing is sent before the person says yes; then events go
+// to PostHog with a random install ID and only counts and fixed choices; session and trigger events; Send test;
+// switching it off deletes the ID. Loading the shortcut list is not a trigger run.
+const { run, wait, until, makeEnv } = require("../harness");
+const STORE = { savedAt: 1, presets: [], settings: { instructions: "Secret instructions about my driveway", engine: "openai", accumulate: false, startMode: "manual" },
+  triggers: [{ id: "t-gate", enabled: true, name: "Open the gate", condition: "A car is at the gate", shortcut: "Open Gate", every: 30, when: "photo", mode: "every", send: "summary", message: "" }] };
+(async () => {
+  const errors = [];
+  process.on("unhandledRejection", (e) => errors.push("UNHANDLED " + (e && e.stack || e)));
+  const files = {}; files[makeEnv().path.store] = JSON.stringify(STORE);
+  let { E, p } = await run({ files, kc: { VISIONX_ANTHROPIC_KEY: "sk-ant-api03-ABCDEFGHIJKLMNOP1234" } });
+  p.catch((e) => errors.push("SCRIPT " + e.stack));
+  await until(() => E.win() && E.win().__booted, 5000, "boot");
+  const events = () => [].concat(...E.log.posthog.map((b) => b.batch));
+  await wait(500);
+  console.log("A before answering: sent", E.log.posthog.length, "| question:", E.text("#usageask p").slice(0, 80) + "…");
+  E.tap('#usageask [data-ua="1"]'); await until(() => E.log.posthog.length, 3000, "consent sent");
+  const id = E.kc["visionx-install-id"];
+  console.log("B yes: toast:", E.text("#aitoast"), "| events:", events().map((e) => e.event).join(","), "| to:", E.log.requests.filter((r) => /posthog/.test(r.url)).map((r) => r.url)[0]);
+  const e0 = events()[0];
+  console.log("  properties:", JSON.stringify(Object.assign({}, e0.properties, { distinct_id: e0.properties.distinct_id === id.toLowerCase() ? "<install id>" : "?" })), "| key:", E.log.posthog[0].api_key.slice(0, 4) + "…");
+  E.tap("#toggle"); await until(() => !E.$("#capBtn").disabled, 5000, "session");
+  E.tap("#capBtn"); await until(() => E.log.shortcutsRun.length, 5000, "trigger");
+  E.tap("#hStop"); await until(() => events().some((e) => e.event === "session_finished"), 5000, "finished event");
+  await wait(400);
+  const pick = (n) => (events().find((e) => e.event === n) || {}).properties || {};
+  const own = (o) => JSON.stringify(Object.fromEntries(Object.entries(o).filter(([k]) => !/^(\$|distinct_id|app$|app_version)/.test(k))));
+  console.log("C session_started", own(pick("session_started")), "| trigger_fired", own(pick("trigger_fired")), "| session_finished", own(pick("session_finished")));
+  const all = JSON.stringify(E.log.posthog);
+  console.log("  never sent: instructions", all.includes("Secret instructions"), "| shortcut names", all.includes("Open Gate"), "| summaries", all.includes("KXA 482"), "| photos", all.includes("base64"));
+  const fired = events().filter((e) => e.event === "trigger_fired").length;
+  E.tap("#tab-triggers"); E.tap("#tAdd"); E.tap("#tLoadSc"); await until(() => !E.$("#tPick").classList.contains("hidden"), 3000, "list");
+  await wait(500);
+  console.log("D Load my shortcuts: trigger_fired events", fired, "→", events().filter((e) => e.event === "trigger_fired").length, "(loading the list is not a trigger run)");
+  if (events().filter((e) => e.event === "trigger_fired").length !== fired) errors.push("loading the shortcut list was counted as a trigger run");
+  E.tap("#cfgOpen"); await until(() => E.$("#cfgsheet.open"), 3000, "settings");
+  E.tap('#cfgsheet [data-act="usage-test"]'); await until(() => /accepted|failed/.test(E.text("#usagemsg") || ""), 3000, "test");
+  console.log("E Send test:", E.text("#usagemsg").replace(/\d\d:\d\d/, "hh:mm"));
+  E.tap('#cfgsheet [data-act="toggle"][data-v="shareUsage"]'); await until(() => !(E.json(E.path.settings) || {}).shareUsage, 3000, "off");
+  const sent = E.log.posthog.length;
+  console.log("F switched off: install ID deleted", !("visionx-install-id" in E.kc), "| settings:", JSON.stringify({ shareUsage: E.json(E.path.settings).shareUsage, usageAsked: E.json(E.path.settings).usageAsked }));
+  E.tap('#cfgsheet [data-act="cfgclose"]'); E.tap("#tab-setup"); E.tap("#toggle"); await until(() => !E.$("#capBtn").disabled, 5000, "session");
+  E.tap("#hStop"); await wait(800);
+  console.log("  nothing sent after:", E.log.posthog.length === sent);
+  E.finish(); await p;
+  ({ E, p } = await run({ files: E.files, kc: E.kc, posthogStatus: 401 }));
+  await until(() => E.win() && E.win().__booted, 5000, "boot");
+  E.tap("#cfgOpen"); await until(() => E.$("#cfgsheet.open"), 3000, "settings");
+  E.tap('#cfgsheet [data-act="toggle"][data-v="shareUsage"]'); await until(() => (E.json(E.path.settings) || {}).shareUsage, 3000, "on");
+  E.tap('#cfgsheet [data-act="usage-test"]'); await until(() => /accepted|failed/.test(E.text("#usagemsg") || ""), 3000, "test");
+  console.log("G on again, PostHog refuses:", E.text("#usagemsg").replace(/\d\d:\d\d/, "hh:mm"), "| new install ID:", E.kc["visionx-install-id"] !== id);
+  E.finish(); await p;
+  const errs = errors.concat(E.problems());
+  console.log("errors:", errs.length ? errs.join(" | ") : "none", "| JS errors:", E.log.jsErrors || "none");
+  process.exit(0);
+})().catch((e) => { console.log("CRASH", e.stack); process.exit(1); });

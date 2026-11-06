@@ -293,6 +293,10 @@ VisionX checks this repository for a new version each time it opens. When one is
 
 Maintainers: release notes live in [`releases.json`](releases.json); see [docs/RELEASING.md](docs/RELEASING.md). Screenshots are regenerated with [repo-site](https://github.com/gadominas/app-blueprints/tree/main/repo-site) from [`docs/site/scenario.js`](docs/site/scenario.js).
 
+### Tests
+
+`tests/` runs the real `VisionX.js` in Node with Scriptable's APIs replaced by stand-ins and taps through 21 scenarios, from first start to triggers, Apple Intelligence, the widget, updates and the installer. Nothing reaches the network. `cd tests && npm install && node run.js`. See [docs/TESTING.md](docs/TESTING.md).
+
 ## Disclaimer
 
 A license plate is not proof of identity, because plates can be copied or misread. Use this for convenience together with other safeguards, not as the only lock.

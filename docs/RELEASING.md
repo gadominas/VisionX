@@ -7,7 +7,8 @@
 1. **Bump the version** in `VisionX.js`: `const VERSION = '1.8.0';`. Use [semantic versioning](https://semver.org): a new feature bumps the middle number (1.7.0 → 1.8.0), a fix-only release the last (1.8.0 → 1.8.1).
 2. **Add a release at the top of `releases.json`**, with the same version.
 3. **Regenerate the changelog**: `node tools/changelog.js`.
-4. **Commit everything to `main`** in one push: the script, `releases.json` and `CHANGELOG.md`.
+4. **Run the tests**: `cd tests && npm install && node run.js`. Release only when every scenario passes; see [TESTING.md](TESTING.md).
+5. **Commit everything to `main`** in one push: the script, `releases.json` and `CHANGELOG.md`.
 
 Keep `const VERSION = '…';` and `const APP_ID = 'visionx';` exactly in that form, with single quotes: the in-app updater reads both lines from the downloaded file to check that it really is a newer VisionX before installing it.
 

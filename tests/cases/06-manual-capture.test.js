@@ -1,0 +1,40 @@
+// Manual capture: Start in Manual, each Capture tap takes the photo at once and queues it, photos are analyzed
+// in order, the queue meter and progress line, a full queue (10) disables Capture, and Manual | Auto mid-session.
+const { run, wait, until } = require("../harness");
+(async () => {
+  const errors = [];
+  process.on("unhandledRejection", (e) => errors.push("UNHANDLED " + (e && e.stack || e)));
+  const { E, p } = await run({ kc: { VISIONX_ANTHROPIC_KEY: "sk-ant-api03-ABCDEFGHIJKLMNOP1234" }, aiDelay: 250 });
+  p.catch((e) => errors.push("SCRIPT " + e.stack));
+  await until(() => E.win() && E.win().__booted, 5000, "boot");
+  console.log("A before a session:", E.text("#capTxt"), "| Capture disabled:", E.$("#capBtn").disabled);
+  E.type("#startMode", "manual"); E.type("#interval", "2");
+  E.tap("#toggle");
+  await until(() => !E.$("#capBtn").disabled, 5000, "capture ready");
+  await wait(2500);
+  console.log("B manual, no photo without a tap:", E.log.ai.length === 0, "| mode:", E.$('#capBar [aria-checked="true"]').textContent, "| line:", E.text("#capTxt"));
+  E.tap("#capBtn"); E.tap("#capBtn"); E.tap("#capBtn"); await wait(60);
+  console.log("C three taps: photos taken", E.log.photos, "| meter:", E.$$("#capBar .capSlots i").map((i) => i.className || "-").join(""), "| line:", E.text("#capTxt"));
+  await until(() => E.log.ai.length >= 3 && /All 3 analyzed/.test(E.text("#capTxt")), 6000, "queue done");
+  console.log("  analyzed in order:", E.log.ai.map((r) => r.text.match(/Frame #(\d+)/)[1]).join(","), "| line:", E.text("#capTxt"));
+  for (let i = 0; i < 11; i++) E.tap("#capBtn");
+  await wait(30);
+  console.log("D eleven quick taps: queued", E.$$("#capBar .capSlots i").filter((i) => i.className).length, "| full:", E.$("#capBar .capSlots").classList.contains("full"), "| Capture disabled:", E.$("#capBtn").disabled, "| line:", E.text("#capTxt"));
+  await until(() => !E.$("#capBtn").disabled, 6000, "a free slot");
+  console.log("  a slot frees up: Capture enabled again, line:", E.text("#capTxt"));
+  await until(() => /All \d+ analyzed/.test(E.text("#capTxt")), 10000, "queue drained");
+  const before = E.log.ai.length;
+  E.tap('#capBar [data-m="auto"]'); await wait(100);
+  console.log("E switched to Auto:", E.$('#capBar [aria-checked="true"]').textContent, "| line:", E.text("#capTxt"));
+  await until(() => E.log.ai.length > before, 4000, "timed photo");
+  console.log("  a timed photo followed without a tap:", E.log.ai.length > before);
+  E.tap("#hPause"); await wait(50);
+  console.log("F paused: Capture disabled", E.$("#capBtn").disabled, "| line:", E.text("#capTxt"));
+  E.tap("#hStop");
+  await until(() => !E.$("#sesDetail").classList.contains("hidden"), 8000, "report");
+  console.log("G saved:", E.json(E.path.index)[0].photos, "photos | Capture after the session:", E.text("#capTxt"));
+  E.finish(); await p;
+  const all = errors.concat(E.problems());
+  console.log("errors:", all.length ? all.join(" | ") : "none", "| JS errors:", E.log.jsErrors || "none");
+  process.exit(0);
+})().catch((e) => { console.log("CRASH", e.stack); process.exit(1); });

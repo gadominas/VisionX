@@ -1,0 +1,58 @@
+// The trigger editor on the Triggers tab: Add trigger, what it checks before saving, Load my shortcuts (the list
+// helper shortcut), a custom message, Edit, Duplicate, Delete with two taps, the on/off switch, and editing
+// locked while a session runs.
+const { run, wait, until } = require("../harness");
+(async () => {
+  const errors = [];
+  process.on("unhandledRejection", (e) => errors.push("UNHANDLED " + (e && e.stack || e)));
+  let { E, p } = await run({});
+  p.catch((e) => errors.push("SCRIPT " + e.stack));
+  await until(() => E.win() && E.win().__booted, 5000, "boot");
+  E.tap("#tab-triggers"); await wait(20);
+  console.log("A empty:", E.text("#trigList"), "| hint:", E.text("#trigHint").slice(0, 60) + "…");
+  E.tap("#tAdd"); await wait(20);
+  console.log("B form open:", !E.$("#trigForm").classList.contains("hidden"), "| when:", E.$("#tWhen").value, "| mode:", E.$("#tMode").value, "| send:", E.$("#tSend").value, "| every:", E.$("#tEvery").value);
+  const save = () => { E.tap("#tSave"); return E.text("#tHint"); };
+  console.log("C checks: no name →", save());
+  E.$("#tName").value = "Open the gate";
+  console.log("  no condition →", save());
+  E.$("#tCond").value = "A car with plate KXA 482 is at the gate";
+  console.log("  no shortcut →", save());
+  E.tap("#tLoadSc"); await until(() => !E.$("#tPick").classList.contains("hidden"), 3000, "shortcut list");
+  console.log("D Load my shortcuts: ran", E.log.callbacks.map((c) => c.name).join(","), "| picker:", E.$$("#tPick option").map((o) => o.textContent).join(" | "), "| hint:", E.text("#tScHint").slice(0, 40));
+  E.type("#tPick", "Open Gate"); await wait(20);
+  E.type("#tSend", "custom"); await wait(20);
+  console.log("  shortcut:", E.$("#tShortcut").value, "| message box shown:", !E.$("#tMsgBox").classList.contains("hidden"), "| send hint:", E.text("#tSendHint").slice(0, 40));
+  console.log("  custom without text →", save());
+  E.$("#tMsg").value = "Gate opened for {reason} at {time}";
+  E.type("#tWhen", "photo"); E.type("#tMode", "new"); await wait(20);
+  console.log("  after each photo: interval hidden", E.$("#tEveryBox").classList.contains("hidden"), "| mode hint:", E.text("#tModeHint").slice(0, 50));
+  save(); await wait(30);
+  console.log("E saved:", E.text("#trigList .tItem"), "| count:", E.text("#trigCount"), "| form closed:", E.$("#trigForm").classList.contains("hidden"));
+  E.tap("#trigList .tItem .chip"); await wait(20);
+  console.log("F editing:", E.$("#tName").value, "| Delete and Duplicate shown:", !E.$("#tDelete").classList.contains("hidden") && !E.$("#tDup").classList.contains("hidden"));
+  await wait(5);
+  E.tap("#tDup"); await wait(30);
+  console.log("  duplicated:", E.text("#tHint").slice(0, 60), "| list:", E.$$("#trigList .tItem b").map((b) => b.textContent).join(", "));
+  E.$("#tShortcut").value = "Notify Me"; save(); await wait(20);
+  E.tap(E.$$("#trigList .tItem .chip")[1]); await wait(20);
+  E.tap("#tDelete"); await wait(10);
+  console.log("G delete first tap:", E.text("#tDelete"), "| count:", E.$$("#trigList .tItem").length);
+  E.tap("#tDelete"); await wait(20);
+  console.log("  second tap: count", E.$$("#trigList .tItem").length, "|", E.text("#trigCount"));
+  E.tap(E.$("#trigList .tItem .switch input")); await wait(20);
+  console.log("H switched off:", E.text("#trigCount"), "| row dimmed:", E.$("#trigList .tItem").classList.contains("off"));
+  E.tap(E.$("#trigList .tItem .switch input")); await wait(20);
+  await until(() => (E.json(E.path.store) || { triggers: [] }).triggers.length === 1, 4000, "save");
+  const t = E.json(E.path.store).triggers[0];
+  console.log("I saved trigger:", JSON.stringify({ name: t.name, shortcut: t.shortcut, when: t.when, mode: t.mode, send: t.send, message: t.message, enabled: t.enabled }));
+  E.finish(); await p;
+  ({ E, p } = await run({ files: E.files }));
+  await until(() => E.win() && E.win().__booted, 5000, "boot");
+  E.tap("#tab-triggers"); await wait(20);
+  console.log("J reopened:", E.$$("#trigList .tItem b").map((b) => b.textContent).join(", "), "| picker remembers shortcuts:", E.$$("#scNames option").length);
+  E.finish(); await p;
+  const errs = errors.concat(E.problems());
+  console.log("errors:", errs.length ? errs.join(" | ") : "none", "| JS errors:", E.log.jsErrors || "none");
+  process.exit(0);
+})().catch((e) => { console.log("CRASH", e.stack); process.exit(1); });
