@@ -1,6 +1,6 @@
 // Settings (app-blueprints settings 1.1.2): the sections in order, Appearance applied at once and saved,
 // tunables stepped, typed (and clamped), reset one by one or all with two taps, the Capture values reaching the
-// page live, Built with opening only the blueprints repository, and a setting the page may not change.
+// page live, Built with opening each blueprint's About sheet and nothing outside the app, and a setting the page may not change.
 const { run, wait, until } = require("../harness");
 (async () => {
   const errors = [];
@@ -40,13 +40,14 @@ const { run, wait, until } = require("../harness");
   await settle(() => !Object.keys(saved().cfg).length);
   console.log("  second tap:", JSON.stringify(saved().cfg), "| footer:", E.text("#cfgsheet .cfg-foot .note"));
   console.log("E Built with:", [...sheet().querySelectorAll(".srow.bp b")].map((b) => b.textContent).join(", "));
-  E.tap(sheet().querySelector(".srow.bp")); await until(() => E.log.opened.length, 3000, "open link");
-  console.log("  opens:", E.log.opened[0]);
+  E.tap(sheet().querySelector(".srow.bp")); await until(() => E.$("#bpabout.open"), 3000, "About sheet");
+  console.log("  About sheet:", E.text("#bpabout h2"), "|", E.doc().querySelectorAll("#bpabout .bp-p").length, "parts");
+  E.tap('#bpabout button[data-act="bpclose"]'); await wait(30);
   const w = E.win();
-  // A crafted call from the page: anything but the blueprints repository is refused
+  // A crafted call from the page: Built with opens nothing outside the app any more (settings 2.0.x)
   w.eval('document.getElementById("cfgsheet").insertAdjacentHTML("beforeend", \'<button id="evil" class="srow" data-act="openurl" data-v="https://example.com/phish">x</button>\')');
   E.tap("#evil"); await wait(300);
-  console.log("F other links refused:", E.log.opened.length === 1);
+  console.log("F nothing opened:", E.log.opened.length === 0);
   E.tap('#cfgsheet [data-act="cfgclose"]'); await wait(30);
   console.log("G Done closes:", !sheet().classList.contains("open"));
   E.finish(); await p;
