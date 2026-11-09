@@ -1,12 +1,15 @@
+<!-- header:start: repo-site/tools/header.js writes this block from docs/site/header.json -->
 <div align="center">
 
-<img src="docs/logo.svg" width="96" alt="VisionX logo: an eye with a red record-dot pupil and a teal scan line">
+<a href="#install"><img src="docs/banner.png" width="100%" alt="VisionX: Sees. Understands. Acts. A photo every few seconds goes in, AI looks at it and runs an Apple Shortcut when something happens. Two iPhone screens show a gate being watched and its triggers, inside viewfinder corners with a teal scan line and a red record dot."></a>
 
-# VisionX
+<h2>Turn a spare iPhone into a camera that understands and acts</h2>
 
-**Sees. Understands. Acts.**
+Point the camera. Say what to watch for. Pick a Shortcut to run.
 
-Your iPhone as an AI smart camera: it takes a photo every few seconds, has Claude, OpenAI or Apple Intelligence look at it with your instructions, and runs an Apple Shortcut when something happens.<br>An iPhone and iPad app for [Scriptable](https://scriptable.app). One file, no server, no sign-up.
+<a href="#install"><img src="docs/button-install.png" height="48" alt="Install VisionX free"></a>&nbsp;&nbsp;<a href="CHANGELOG.md"><img src="docs/button-whats-new.png" height="48" alt="See what's new in VisionX"></a>
+
+<sub>Free · iPhone and iPad · Runs in the free Scriptable app · Uses Apple Intelligence or your own Claude or OpenAI key</sub>
 
 [![Version](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Fgadominas%2FVisionX%2Fmain%2Freleases.json&query=%24.releases%5B0%5D.version&label=version&color=E5383B&labelColor=0E1116&style=flat-square)](CHANGELOG.md)
 [![Platform](https://img.shields.io/badge/iOS-Scriptable-171B22?style=flat-square&labelColor=0E1116)](https://apps.apple.com/app/scriptable/id1405459188)
@@ -16,6 +19,7 @@ Your iPhone as an AI smart camera: it takes a photo every few seconds, has Claud
 [![License](https://img.shields.io/badge/license-MIT-171B22?style=flat-square&labelColor=0E1116)](LICENSE)
 
 </div>
+<!-- header:end -->
 
 <p align="center">
   <img src="docs/screenshots/01-gate.png" width="31%" alt="Live tab at a driveway gate: the plate KXA 482 is read, it is on the list, and the Open the gate trigger has run the Open Gate shortcut">

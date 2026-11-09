@@ -1,0 +1,31 @@
+{
+  "name": "VisionX",
+  "accent": "#E5383B",
+  "headline": [
+    "Sees.",
+    "Understands.",
+    "Acts."
+  ],
+  "headlineSize": 88,
+  "sentence": "A photo every few seconds goes in. AI looks at it with your instructions and runs an Apple Shortcut when something happens.",
+  "shots": [
+    {
+      "card": "03-triggers.png"
+    },
+    {
+      "card": "01-gate.png"
+    }
+  ],
+  "motif": {
+    "x": -8,
+    "y": 12,
+    "w": 596,
+    "rotate": 0,
+    "front": true,
+    "svg": "<svg viewBox='0 0 530 540' xmlns='http://www.w3.org/2000/svg'><g fill='none' stroke='#9AA3AE' stroke-opacity='.75' stroke-width='9' stroke-linecap='round'><path d='M6 60 V6 H60'/><path d='M524 60 V6 H470'/><path d='M6 480 V534 H60'/><path d='M524 480 V534 H470'/></g><path d='M262 -2 V542' stroke='#2DD4BF' stroke-width='6' stroke-linecap='round' stroke-opacity='.9'/><circle cx='488' cy='500' r='20' fill='{accent}'/><circle cx='494' cy='494' r='5' fill='#F6F7F9'/></svg>"
+  },
+  "benefit": "Turn a spare iPhone into a camera that understands and acts",
+  "steps": "Point the camera. Say what to watch for. Pick a Shortcut to run.",
+  "facts": "Free · iPhone and iPad · Runs in the free Scriptable app · Uses Apple Intelligence or your own Claude or OpenAI key",
+  "bannerAlt": "VisionX: Sees. Understands. Acts. A photo every few seconds goes in, AI looks at it and runs an Apple Shortcut when something happens. Two iPhone screens show a gate being watched and its triggers, inside viewfinder corners with a teal scan line and a red record dot."
+}
